@@ -1,0 +1,18 @@
+{
+  "name": "shadow-ai-quiz-platform",
+  "version": "1.0.0",
+  "description": "Shadow AI awareness training quiz platform for Stingray",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "seed": "node scripts/seed-quiz.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "puppeteer": "^24.41.0",
+    "uuid": "^10.0.0"
+  }
+}

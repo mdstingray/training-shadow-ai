@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Shadow AI Quiz Platform</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#111111;--accent:#0070e0;--highlight:#41c3ff;--text:#ffffff;--card:#1a1a1a;--card-border:#2a2a2a;--correct:#22c55e;--wrong:#ef4444;--warn:#f59e0b;--radius:12px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+
+.app{max-width:1100px;margin:0 auto;padding:24px 16px}
+
+.header{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--card-border);margin-bottom:24px;flex-wrap:wrap;gap:12px}
+.header h1{font-size:1.3rem;font-weight:700;color:var(--highlight)}
+.header-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+.btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:.9rem;font-weight:600;cursor:pointer;transition:background .2s;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:#005bb5}
+.btn.outline{background:transparent;border:1px solid #444;color:#ccc}
+.btn.outline:hover{border-color:var(--accent);color:#fff}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px}
+.stat-card{background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);padding:20px;text-align:center}
+.stat-card .val{font-size:2rem;font-weight:800;color:var(--highlight)}
+.stat-card .label{font-size:.8rem;color:#999;margin-top:4px}
+
+.filters{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.filter-btn{background:transparent;border:1px solid #333;border-radius:6px;padding:8px 16px;color:#aaa;font-size:.85rem;cursor:pointer;transition:all .2s}
+.filter-btn:hover,.filter-btn.active{border-color:var(--accent);color:#fff;background:rgba(0,112,224,.15)}
+
+.deadline-row{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.deadline-row label{font-size:.9rem;color:#999}
+.deadline-input{background:#222;border:1px solid #444;border-radius:6px;padding:8px 12px;color:#fff;font-size:.9rem}
+.deadline-input:focus{outline:none;border-color:var(--accent)}
+
+.table-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--card-border)}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th{background:#1a1a1a;color:#999;font-weight:600;text-align:left;padding:12px 14px;border-bottom:1px solid var(--card-border);white-space:nowrap}
+td{padding:12px 14px;border-bottom:1px solid #222;vertical-align:middle}
+tr:hover td{background:rgba(0,112,224,.04)}
+
+.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:.78rem;font-weight:600}
+.badge.completed{background:rgba(34,197,94,.15);color:#86efac}
+.badge.in-progress{background:rgba(245,158,11,.15);color:#fbbf24}
+.badge.not-started{background:rgba(239,68,68,.12);color:#fca5a5}
+
+.empty{text-align:center;padding:60px 20px;color:#666}
+
+.error{text-align:center;padding:60px 20px;color:var(--wrong)}
+.error h2{margin-bottom:12px}
+
+@media(max-width:480px){
+  .app{padding:12px}
+  .header h1{font-size:1.1rem}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  th,td{padding:10px 8px;font-size:.8rem}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <h1>📊 Admin — Shadow AI Quiz</h1>
+    <div class="header-actions">
+      <button class="btn outline" onclick="refreshData()">↻ Refresh</button>
+      <a class="btn" id="csvLink" href="#">⬇ Export CSV</a>
+    </div>
+  </header>
+
+  <div id="content">
+    <div class="empty">Loading...</div>
+  </div>
+</div>
+
+<script>
+const API_BASE = window.location.origin;
+let adminToken = '';
+let allUsers = [];
+let quizzes = [];
+let currentFilter = 'all';
+
+function getToken() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('token') || '';
+}
+
+async function fetchData() {
+  adminToken = getToken();
+  if (!adminToken) {
+    document.getElementById('content').innerHTML = `<div class="error"><h2>Unauthorized</h2><p>Add ?token=YOUR_TOKEN to the URL.</p></div>`;
+    return;
+  }
+
+  try {
+    const res = await fetch(API_BASE + '/admin/api/users?token=' + encodeURIComponent(adminToken));
+    if (!res.ok) {
+      document.getElementById('content').innerHTML = `<div class="error"><h2>Unauthorized</h2><p>Invalid admin token.</p></div>`;
+      return;
+    }
+    const data = await res.json();
+    allUsers = data.users || [];
+    quizzes = data.quizzes || [];
+
+    document.getElementById('csvLink').href = API_BASE + '/admin/api/export.csv?token=' + encodeURIComponent(adminToken);
+
+    renderDashboard();
+  } catch (e) {
+    document.getElementById('content').innerHTML = `<div class="error"><h2>Error</h2><p>Could not connect to server.</p></div>`;
+  }
+}
+
+function renderDashboard() {
+  const completed = allUsers.filter(u => u.status === 'completed').length;
+  const inProgress = allUsers.filter(u => u.status === 'in_progress').length;
+  const notStarted = allUsers.filter(u => u.status === 'not_started').length;
+  const total = allUsers.length;
+
+  const quiz = quizzes.length > 0 ? quizzes[0] : null;
+  const deadline = quiz ? quiz.deadline || '' : '';
+
+  let filtered = allUsers;
+  if (currentFilter !== 'all') {
+    filtered = allUsers.filter(u => u.status === currentFilter);
+  }
+
+  let html = `
+    <div class="stats">
+      <div class="stat-card"><div class="val">${total}</div><div class="label">Total Users</div></div>
+      <div class="stat-card"><div class="val" style="color:var(--correct)">${completed}</div><div class="label">Completed</div></div>
+      <div class="stat-card"><div class="val" style="color:var(--warn)">${inProgress}</div><div class="label">In Progress</div></div>
+      <div class="stat-card"><div class="val" style="color:var(--wrong)">${notStarted}</div><div class="label">Not Started</div></div>
+    </div>
+
+    <div class="deadline-row">
+      <label>Deadline:</label>
+      <input type="date" class="deadline-input" id="deadlineInput" value="${deadline}" onchange="updateDeadline(this.value)">
+      <span id="deadlineMsg" style="font-size:.8rem;color:#666"></span>
+    </div>
+
+    <div class="filters">
+      <button class="filter-btn ${currentFilter==='all'?'active':''}" onclick="setFilter('all')">All (${total})</button>
+      <button class="filter-btn ${currentFilter==='completed'?'active':''}" onclick="setFilter('completed')">Completed (${completed})</button>
+      <button class="filter-btn ${currentFilter==='in_progress'?'active':''}" onclick="setFilter('in_progress')">In Progress (${inProgress})</button>
+      <button class="filter-btn ${currentFilter==='not_started'?'active':''}" onclick="setFilter('not_started')">Not Started (${notStarted})</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Status</th>
+            <th>Avg Score</th>
+            <th>Total Time</th>
+            <th>Attempts</th>
+            <th>Completion Date</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+  if (filtered.length === 0) {
+    html += `<tr><td colspan="7" style="text-align:center;color:#666;padding:24px">No users found.</td></tr>`;
+  } else {
+    for (const u of filtered) {
+      const badgeCls = u.status === 'completed' ? 'completed' : u.status === 'in_progress' ? 'in-progress' : 'not-started';
+      const statusLabel = u.status === 'completed' ? 'Completed' : u.status === 'in_progress' ? 'In Progress' : 'Not Started';
+      const timeStr = u.total_time > 0 ? formatTime(u.total_time) : '—';
+      const dateStr = u.completion_date || '—';
+      const scoreStr = u.status !== 'not_started' ? u.avg_score + '%' : '—';
+
+      html += `<tr>
+        <td><strong>${esc(u.name)}</strong></td>
+        <td>${esc(u.email)}</td>
+        <td><span class="badge ${badgeCls}">${statusLabel}</span></td>
+        <td>${scoreStr}</td>
+        <td>${timeStr}</td>
+        <td>${u.attempts || '—'}</td>
+        <td>${dateStr}</td>
+      </tr>`;
+    }
+  }
+
+  html += `</tbody></table></div>`;
+  document.getElementById('content').innerHTML = html;
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  renderDashboard();
+}
+
+async function updateDeadline(val) {
+  const quiz = quizzes.length > 0 ? quizzes[0] : null;
+  if (!quiz) return;
+
+  try {
+    const res = await fetch(API_BASE + '/admin/api/quiz/' + quiz.id + '/deadline?token=' + encodeURIComponent(adminToken), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deadline: val })
+    });
+    if (res.ok) {
+      document.getElementById('deadlineMsg').textContent = 'Saved!';
+      quiz.deadline = val;
+      setTimeout(() => { document.getElementById('deadlineMsg').textContent = ''; }, 2000);
+    }
+  } catch (e) {
+    document.getElementById('deadlineMsg').textContent = 'Error saving';
+  }
+}
+
+function refreshData() {
+  fetchData();
+}
+
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+fetchData();
+</script>
+</body>
+</html>

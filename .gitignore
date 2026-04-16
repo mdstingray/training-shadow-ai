@@ -1,5 +1,10 @@
 node_modules/
-test-quiz.js
-test-results.json
-package.json
-package-lock.json
+*.db
+*.db-shm
+*.db-wal
+quiz-platform/.env
+quiz-platform/test-*.js
+quiz-platform/test-*.json
+quiz-platform/node_modules/
+/package.json
+/package-lock.json
