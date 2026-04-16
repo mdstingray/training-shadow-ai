@@ -5,7 +5,7 @@ const { getDb } = require('../db/init');
 function requireAdmin(req, res, next) {
   const token = req.query.token || req.headers['x-admin-token'];
   if (!token || token !== process.env.ADMIN_TOKEN) {
-    return res.status(401).json({ error: 'Unauthorized — invalid admin token' });
+    return res.status(403).json({ error: 'Forbidden — invalid or missing admin token' });
   }
   next();
 }

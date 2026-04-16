@@ -13,7 +13,7 @@ router.post('/start', (req, res) => {
 
   const user = db.prepare('SELECT * FROM users WHERE unique_code = ?').get(code);
   if (!user) {
-    return res.status(404).json({ error: 'invalid_code' });
+    return res.status(401).json({ error: 'invalid_code', message: 'Lien invalide — contacte ton admin. / Invalid link — contact your admin.' });
   }
 
   const quizUsers = db.prepare(`

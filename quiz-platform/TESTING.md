@@ -1,257 +1,104 @@
 # TESTING.md — Shadow AI Quiz Platform
 
-**Date:** April 16, 2026  
-**Tools:** Node.js HTTP client (API tests) + Puppeteer (E2E browser tests)  
-**Result:** 107 / 107 tests passed (100%)
+**Date:** April 16, 2026
+**Tools:** Node.js HTTP client (API) + Puppeteer (E2E browser tests)
+**Result:** 40 / 40 tests PASSED — all sections green
 
 ---
 
-## Setup
+## 1. Setup
 
-```bash
-cd quiz-platform
-npm install
-node scripts/seed-quiz.js   # Creates quiz + 5 sample users
-node backend/server.js       # Starts on port 3000
-```
-
----
-
-## Test Suite 1: API Endpoint Tests (54 tests)
-
-### GET /
-
-| # | Test | Result |
-|---|------|--------|
-| 1 | Returns 200 | PASS |
-| 2 | Returns `{ status: "ok" }` | PASS |
-
-### POST /api/start
-
-| # | Test | Result |
-|---|------|--------|
-| 3 | Valid code returns 200 | PASS |
-| 4 | Returns correct user name | PASS |
-| 5 | Returns quiz data with id=1 | PASS |
-| 6 | Returns 6 modules | PASS |
-| 7 | Returns attempts array | PASS |
-| 8 | Invalid code returns 404 | PASS |
-| 9 | Returns `invalid_code` error message | PASS |
-| 10 | Missing code returns 400 | PASS |
-
-### POST /api/submit
-
-| # | Test | Result |
-|---|------|--------|
-| 11 | Valid submit returns 200 | PASS |
-| 12 | Returns `success: true` | PASS |
-| 13 | Second module submit returns 200 | PASS |
-| 14 | Invalid code returns 404 | PASS |
-| 15 | Missing fields returns 400 | PASS |
-
-### GET /api/progress/:code
-
-| # | Test | Result |
-|---|------|--------|
-| 16 | Returns 200 for valid code | PASS |
-| 17 | Returns correct user name | PASS |
-| 18 | Status is `in_progress` after 2/6 modules | PASS |
-| 19 | Shows 2 completed modules | PASS |
-| 20 | Shows 6 total modules | PASS |
-| 21 | Has 2 attempt records | PASS |
-| 22 | Invalid code returns 404 | PASS |
-
-### Full Completion Flow
-
-| # | Test | Result |
-|---|------|--------|
-| 23-26 | Remaining 4 modules submitted (200 each) | PASS |
-| 27 | Status changes to `completed` after 6/6 modules | PASS |
-| 28 | Shows 6/6 completed | PASS |
-
-### GET /admin/api/users
-
-| # | Test | Result |
-|---|------|--------|
-| 29 | Returns 200 with valid token | PASS |
-| 30 | Returns users array | PASS |
-| 31 | Has 5 users | PASS |
-| 32 | Returns quizzes array | PASS |
-| 33 | First user shows as `completed` | PASS |
-| 34 | First user has avg_score > 0 (78.33%) | PASS |
-| 35 | 4 users show as `not_started` | PASS |
-| 36 | Invalid token returns 401 | PASS |
-| 37 | Missing token returns 401 | PASS |
-
-### GET /admin/api/export.csv
-
-| # | Test | Result |
-|---|------|--------|
-| 38 | Returns 200 | PASS |
-| 39 | Content-Type is text/csv | PASS |
-| 40 | CSV contains user data | PASS |
-| 41 | CSV has proper headers | PASS |
-| 42 | CSV has header + 5 data rows | PASS |
-| 43 | Invalid token returns 401 | PASS |
-
-### PUT /admin/api/quiz/:id/deadline
-
-| # | Test | Result |
-|---|------|--------|
-| 44 | Returns 200 | PASS |
-| 45 | Returns `success: true` | PASS |
-| 46 | Deadline persisted in DB (2026-04-30) | PASS |
-| 47 | Invalid token returns 401 | PASS |
-
-### Static File Serving
-
-| # | Test | Result |
-|---|------|--------|
-| 48 | GET /quiz?code=... serves quiz.html (200) | PASS |
-| 49 | Quiz HTML contains Shadow AI content | PASS |
-| 50 | GET /admin/dashboard.html serves (200) | PASS |
-| 51 | Admin HTML contains Admin content | PASS |
-
-### Second User (Not Started)
-
-| # | Test | Result |
-|---|------|--------|
-| 52 | Progress returns 200 | PASS |
-| 53 | Status is `not_started` | PASS |
-| 54 | 0 completed modules | PASS |
+| # | Test | Steps | Expected | Actual | Result |
+|---|------|-------|----------|--------|--------|
+| 1.1 | npm install completes without errors | `cd quiz-platform && npm install` | node_modules/ created, no errors | node_modules/ exists, 0 vulnerabilities | **PASS** |
+| 1.2 | seed-quiz.js runs successfully, prints 5 sample links | `node scripts/seed-quiz.js` | 5 users created, 5 links printed to console | 5 users found, links printed with unique codes | **PASS** |
+| 1.3 | server.js starts on port 3000 without errors | `node backend/server.js` then `curl localhost:3000/` | GET / returns 200 with `{"status":"ok"}` | status=200, status=ok | **PASS** |
+| 1.4 | DB file quiz.db is created automatically | `ls backend/db/quiz.db` | File exists | quiz.db exists | **PASS** |
 
 ---
 
-## Test Suite 2: E2E Browser Tests — Puppeteer (53 tests)
+## 2. API Tests
 
-### Invalid/Missing Code
+| # | Test | Steps | Expected | Actual | Result |
+|---|------|-------|----------|--------|--------|
+| 2.1 | POST /api/start with valid code returns quiz data + user info (200) | `curl -X POST localhost:3000/api/start -H 'Content-Type: application/json' -d '{"code":"C2750942A"}'` | Status 200, user name, quiz data, 6 modules | status=200, user=Alice Martin, modules=6 | **PASS** |
+| 2.2 | POST /api/start with invalid code returns 401 with clear error message | `curl -X POST localhost:3000/api/start -d '{"code":"INVALIDXYZ"}'` | Status 401, error=invalid_code, human-readable message | status=401, error=invalid_code, msg="Lien invalide — contacte ton admin..." | **PASS** |
+| 2.3 | POST /api/submit with valid data saves to DB and returns confirmation | `curl -X POST localhost:3000/api/submit -d '{"code":"...","module_id":1,"score":100,"time_spent_seconds":30}'` | Status 200, success=true, attempt_number=1 | status=200, success=true, attempt=1 | **PASS** |
+| 2.4 | POST /api/submit second attempt increments attempt_number correctly | `curl -X POST /api/submit` (same module_id again) | attempt_number=2 | attempt_number=2 | **PASS** |
+| 2.5 | GET /api/progress/:code returns correct completion % and per-module status | `curl localhost:3000/api/progress/C2750942A` | status=completed, completionPercent=100, 6 perModule entries | status=completed, pct=100%, modules=6 | **PASS** |
+| 2.6 | Progress tracks best score per module and attempt count | Check perModule[0].best_score and attempts | best_score=100 (first attempt beat second's 50), attempts=2 | best_score=100, attempts=2 | **PASS** |
+| 2.7 | GET /admin/users?token=changeme returns all 5 seed users with correct status | `curl localhost:3000/admin/api/users?token=changeme` | Status 200, 5 users returned | status=200, users=5 | **PASS** |
+| 2.8 | Alice shows as completed in admin view | Check Alice's status in admin response | status=completed | status=completed | **PASS** |
+| 2.9 | GET /admin/users without token returns 403 | `curl localhost:3000/admin/api/users` | Status 403 | status=403 | **PASS** |
+| 2.10 | GET /admin/users with wrong token returns 403 | `curl localhost:3000/admin/api/users?token=wrong` | Status 403 | status=403 | **PASS** |
+| 2.11 | GET /admin/export.csv?token=changeme returns valid CSV with headers | `curl localhost:3000/admin/api/export.csv?token=changeme` | Status 200, Content-Type=text/csv, header row + 5 data rows | status=200, 6 CSV lines, correct headers | **PASS** |
 
-| # | Test | Result |
-|---|------|--------|
-| 1 | Invalid code shows error screen ("Lien invalide") | PASS |
-| 2 | No code parameter shows error screen | PASS |
+---
 
-### Valid Code — Intro Screen
+## 3. Quiz Flow (Full User Journey via Puppeteer)
 
-| # | Test | Result |
-|---|------|--------|
-| 3 | Welcome message shows user name | PASS |
-| 4 | User badge visible in header | PASS |
-| 5 | FR is default language | PASS |
-| 6 | Start button loads Module 1 | PASS |
-| 7 | EN toggle works mid-quiz | PASS |
+| # | Test | Steps | Expected | Actual | Result |
+|---|------|-------|----------|--------|--------|
+| 3.1 | Open quiz.html?code=VALID_CODE — quiz loads, user name shown | Open `/quiz?code=47DF10BA8` in browser | Welcome message with "Bob Tremblay" | "Bienvenue, Bob Tremblay" | **PASS** |
+| 3.2 | Open quiz.html?code=INVALID — friendly error message shown | Open `/quiz?code=INVALIDXXX` | Error screen with "Lien invalide" | "Lien invalide — contacte ton admin." | **PASS** |
+| 3.3 | Complete Module 1: answer all questions, submit, see score + feedback | Click Start, answer 2 questions correctly | 2 green feedback messages shown | 2 feedback messages shown | **PASS** |
+| 3.4 | Module 1 progress bar + Next button | Answer all, check Next enabled | Next enabled, progress at 13.33% | nextEnabled=true, width=13.3333% | **PASS** |
+| 3.5 | Module 2 progress bar + Next button | Navigate to M2, answer all | Next enabled, progress at 26.67% | nextEnabled=true, width=26.6667% | **PASS** |
+| 3.6 | Module 3 progress bar + Next button | Navigate to M3, answer all | Next enabled, progress at 40% | nextEnabled=true, width=40% | **PASS** |
+| 3.7 | Module 4 progress bar + Next button | Navigate to M4, answer all | Next enabled, progress at 53.33% | nextEnabled=true, width=53.3333% | **PASS** |
+| 3.8 | Module 5 progress bar + Next button | Navigate to M5, answer all | Next enabled, progress at 66.67% | nextEnabled=true, width=66.6667% | **PASS** |
+| 3.9 | Complete all 6 modules in sequence | Navigate through M1-M6 | All 6 completed | All 6 modules completed | **PASS** |
+| 3.10 | Progress bar advances correctly (reaches 100%) | Check progress bar after last module | width=100% | width=100% | **PASS** |
+| 3.11 | Final screen shows overall score after last module | Check results screen | Score "15 / 15" displayed | "15 / 15" | **PASS** |
+| 3.12 | After completing all modules: GET /api/progress shows 100% complete | `curl /api/progress/47DF10BA8` | status=completed, completionPercent=100 | status=completed, pct=100 | **PASS** |
 
-### Module-by-Module Playthrough (All Correct)
+---
 
-#### Module 1: Qu'est-ce que le Shadow AI ?
+## 4. Admin Dashboard
 
-| # | Test | Result |
-|---|------|--------|
-| 8 | Title displayed | PASS |
-| 9 | Has 2 questions | PASS |
-| 10 | Q1 correct feedback | PASS |
-| 11 | Q2 correct feedback | PASS |
-| 12 | Next button enabled | PASS |
+| # | Test | Steps | Expected | Actual | Result |
+|---|------|-------|----------|--------|--------|
+| 4.1 | Open /admin/dashboard.html?token=changeme — table loads with all users | Open admin dashboard in browser | 5 table rows | 5 rows | **PASS** |
+| 4.2 | Status column shows correct state | Check badge text on each row | 2 Completed, 3 Not Started | 2 Completed, 3 Not Started | **PASS** |
+| 4.3 | Filter buttons present | Count filter buttons | 4 buttons (All/Completed/In Progress/Not Started) | 4 buttons | **PASS** |
+| 4.4 | Completed filter works | Click Completed filter | 2 rows shown | 2 rows | **PASS** |
+| 4.5 | Not Started filter works | Click Not Started filter | 3 rows shown | 3 rows | **PASS** |
+| 4.6 | CSV export button has correct link | Check CSV link href | Contains export.csv and token | Correct link with token | **PASS** |
+| 4.7 | Deadline input field is present | Check for date input | Input exists | Input exists | **PASS** |
+| 4.8 | Admin dashboard without token shows error | Open `/admin/dashboard.html` (no token) | Error message displayed | Error shown | **PASS** |
 
-#### Module 2: Les risques réels
+---
 
-| # | Test | Result |
-|---|------|--------|
-| 13 | Title displayed | PASS |
-| 14 | Has 2 questions | PASS |
-| 15 | Q1 correct feedback | PASS |
-| 16 | Q2 correct feedback | PASS |
-| 17 | Next button enabled | PASS |
+## 5. Edge Cases
 
-#### Module 3: Les outils approuvés
-
-| # | Test | Result |
-|---|------|--------|
-| 18 | Title displayed | PASS |
-| 19 | Has 2 questions | PASS |
-| 20 | Q1 correct feedback | PASS |
-| 21 | Q2 correct feedback | PASS |
-| 22 | Next button enabled | PASS |
-
-#### Module 4: Le bon processus
-
-| # | Test | Result |
-|---|------|--------|
-| 23 | Title displayed | PASS |
-| 24 | Has 2 questions | PASS |
-| 25 | Q1 correct feedback | PASS |
-| 26 | Q2 correct feedback | PASS |
-| 27 | Next button enabled | PASS |
-
-#### Module 5: Scénarios pratiques
-
-| # | Test | Result |
-|---|------|--------|
-| 28 | Title displayed | PASS |
-| 29 | Has 2 questions | PASS |
-| 30 | Q1 correct feedback | PASS |
-| 31 | Q2 correct feedback | PASS |
-| 32 | Next button enabled | PASS |
-
-#### Module 6: Quiz final — Vrai ou Faux
-
-| # | Test | Result |
-|---|------|--------|
-| 33 | Title displayed | PASS |
-| 34 | Has 5 questions | PASS |
-| 35-39 | Q1-Q5 correct feedback | PASS |
-| 40 | Next button enabled | PASS |
-
-### Results Screen
-
-| # | Test | Result |
-|---|------|--------|
-| 41 | Perfect score "15 / 15" displayed | PASS |
-| 42 | Recap has all 15 question items | PASS |
-| 43 | Key takeaways section present | PASS |
-| 44 | Server confirms user status = `completed` | PASS |
-| 45 | Server confirms 6/6 modules completed | PASS |
-
-### Mobile Viewport (375px)
-
-| # | Test | Result |
-|---|------|--------|
-| 46 | App fits within 375px | PASS |
-| 47 | No horizontal overflow | PASS |
-
-### Admin Dashboard (Browser)
-
-| # | Test | Result |
-|---|------|--------|
-| 48 | Dashboard has 4 stat cards | PASS |
-| 49 | Dashboard shows 5 user rows | PASS |
-| 50 | Dashboard has 4 filter buttons | PASS |
-| 51 | CSV export link with token present | PASS |
-| 52 | Deadline input present | PASS |
-| 53 | Dashboard without token shows error | PASS |
+| # | Test | Steps | Expected | Actual | Result |
+|---|------|-------|----------|--------|--------|
+| 5.1 | Pre-refresh: answer saved | Answer Q1 of Module 1, check feedback | 1 feedback shown | 1 feedback shown | **PASS** |
+| 5.2 | Refreshing quiz page mid-module resumes correctly (progress not lost) | Reload page after answering Q1 | Module 1 still visible, Q1 answer preserved | Module 1 visible, 1 feedback preserved | **PASS** |
+| 5.3 | Completing a module twice: second attempt recorded | POST /api/submit twice for same module | First attempt_number=1, second attempt_number=2 | First=1, second=2 | **PASS** |
+| 5.4 | Best score kept across attempts | GET /api/progress, check best_score | best_score=80 (80 > 50), attempts=2 | best_score=80, attempts=2 | **PASS** |
+| 5.5 | Two different users can take the quiz simultaneously | Open two browser tabs with different codes | Each user sees their own name, independent state | Alice sees "Alice", David sees "David" — independent | **PASS** |
 
 ---
 
 ## Summary
 
-| Suite | Tests | Passed | Failed |
-|-------|-------|--------|--------|
-| API Endpoints | 54 | 54 | 0 |
-| E2E Browser (Puppeteer) | 53 | 53 | 0 |
-| **TOTAL** | **107** | **107** | **0** |
+| Section | Tests | Passed | Failed |
+|---------|-------|--------|--------|
+| 1. Setup | 4 | 4 | 0 |
+| 2. API Tests | 11 | 11 | 0 |
+| 3. Quiz Flow | 12 | 12 | 0 |
+| 4. Admin Dashboard | 8 | 8 | 0 |
+| 5. Edge Cases | 5 | 5 | 0 |
+| **TOTAL** | **40** | **40** | **0** |
 
-### Bugs Found
+### Bugs Found & Fixed Before Final Run
 
-None — all 107 tests passed.
+1. **Invalid code returned 404 instead of 401** — Fixed in `auth.js` and `quiz.js` to return 401 with clear bilingual error message.
+2. **Admin missing token returned 401 instead of 403** — Fixed in `admin.js` to return 403 Forbidden.
+3. **Second attempt didn't auto-increment attempt_number** — Fixed in `quiz.js` to query `MAX(attempt_number)` and auto-increment.
+4. **Page refresh lost all progress** — Added `sessionStorage` persistence in `quiz.html` — answers, current module, and language saved on every interaction, restored on page load.
+5. **Duplicate module submission on revisit** — Added `submittedModules` tracking to avoid re-submitting already-submitted modules to the server.
+6. **Progress API missing per-module breakdown** — Added `perModule` array and `completionPercent` field to progress response, plus `avgBestScore` using best score per module.
 
-### Test Coverage
-
-- All 5 API endpoints tested (success + error cases)
-- Authentication (valid/invalid/missing codes + admin token)
-- Full quiz flow: 6 modules, 15 questions, correct answers
-- Score submission to server after each module
-- Progress tracking (not_started → in_progress → completed)
-- Admin dashboard: stats, table, filters, CSV export, deadline
-- Mobile responsive (375px viewport)
-- FR/EN language toggle
-- Error handling (invalid links)
+All bugs were fixed and verified before the final test run. **40/40 PASS.**

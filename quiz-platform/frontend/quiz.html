@@ -637,6 +637,42 @@ let userData = null;
 let quizData = null;
 let serverModules = [];
 let moduleStartTime = 0;
+let submittedModules = new Set();
+
+function storageKey() { return userCode ? 'quiz_state_' + userCode : null; }
+
+function saveState() {
+  const k = storageKey();
+  if (!k) return;
+  try {
+    sessionStorage.setItem(k, JSON.stringify({
+      currentModule, answers, submittedModules: [...submittedModules], lang
+    }));
+  } catch(e) {}
+}
+
+function loadState() {
+  const k = storageKey();
+  if (!k) return false;
+  try {
+    const raw = sessionStorage.getItem(k);
+    if (!raw) return false;
+    const s = JSON.parse(raw);
+    if (s.answers && s.answers.length > 0) {
+      answers = s.answers;
+      currentModule = s.currentModule != null ? s.currentModule : -1;
+      submittedModules = new Set(s.submittedModules || []);
+      if (s.lang) { lang = s.lang; }
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
+function clearState() {
+  const k = storageKey();
+  if (k) try { sessionStorage.removeItem(k); } catch(e) {}
+}
 
 function t() { return QUIZ_DATA[lang]; }
 
@@ -644,6 +680,7 @@ function setLang(l) {
   lang = l;
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === l));
   document.documentElement.lang = l;
+  saveState();
   render();
 }
 
@@ -695,10 +732,11 @@ async function submitModuleToServer(mIdx) {
         code: userCode,
         module_id: serverModules[mIdx].id,
         score: pct,
-        time_spent_seconds: timeSpent,
-        attempt_number: 1
+        time_spent_seconds: timeSpent
       })
     });
+    submittedModules.add(mIdx);
+    saveState();
   } catch (e) {
     console.warn('Failed to submit module:', e);
   }
@@ -744,7 +782,9 @@ function renderIntro() {
 function startQuiz() {
   currentModule = 0;
   answers = [];
+  submittedModules = new Set();
   moduleStartTime = Date.now();
+  saveState();
   render();
 }
 
@@ -812,6 +852,7 @@ function selectAnswer(mIdx, qIdx, oIdx) {
   const question = getModules()[mIdx].questions[qIdx];
   const isCorrect = oIdx === question.correct;
   answers.push({ moduleIdx: mIdx, questionIdx: qIdx, selectedOpt: oIdx, correct: isCorrect });
+  saveState();
   renderModule(mIdx);
   const el = document.getElementById(`q-${mIdx}-${qIdx}`);
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -819,11 +860,12 @@ function selectAnswer(mIdx, qIdx, oIdx) {
 
 async function goNext() {
   if (currentModule >= 0 && !allModuleAnswered(currentModule)) return;
-  if (currentModule >= 0) {
+  if (currentModule >= 0 && !submittedModules.has(currentModule)) {
     await submitModuleToServer(currentModule);
   }
   currentModule++;
   moduleStartTime = Date.now();
+  saveState();
   window.scrollTo({ top: 0, behavior: 'smooth' });
   render();
 }
@@ -831,6 +873,7 @@ async function goNext() {
 function goBack() {
   if (currentModule > 0) {
     currentModule--;
+    saveState();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     render();
   }
@@ -884,6 +927,8 @@ function renderResults() {
 function restartQuiz() {
   currentModule = -1;
   answers = [];
+  submittedModules = new Set();
+  clearState();
   window.scrollTo({ top: 0, behavior: 'smooth' });
   render();
 }
@@ -919,7 +964,14 @@ async function init() {
     document.getElementById('userBadge').textContent = userData.name;
     document.getElementById('userBadge').style.display = 'inline-block';
 
-    currentModule = -1;
+    const restored = loadState();
+    if (restored) {
+      document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+      document.documentElement.lang = lang;
+      moduleStartTime = Date.now();
+    } else {
+      currentModule = -1;
+    }
     render();
   } catch (e) {
     console.warn('API not available, running in standalone mode');
