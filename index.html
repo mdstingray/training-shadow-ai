@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shadow AI — Formation Stingray</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#111111;--accent:#0070e0;--highlight:#41c3ff;--text:#ffffff;--card:#1a1a1a;--card-border:#2a2a2a;--correct:#22c55e;--wrong:#ef4444;--radius:12px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6;overflow-x:hidden}
+a{color:var(--highlight)}
+
+.app{max-width:720px;margin:0 auto;padding:16px;min-height:100vh;display:flex;flex-direction:column}
+
+/* Header */
+.header{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--card-border);margin-bottom:20px;flex-wrap:wrap;gap:8px}
+.header h1{font-size:1.15rem;font-weight:700;color:var(--highlight)}
+.lang-toggle{display:flex;gap:0;border:1px solid var(--accent);border-radius:6px;overflow:hidden}
+.lang-btn{background:transparent;color:var(--text);border:none;padding:6px 14px;cursor:pointer;font-size:.85rem;font-weight:600;transition:background .2s}
+.lang-btn.active{background:var(--accent)}
+
+/* Progress */
+.progress-wrap{margin-bottom:24px}
+.progress-label{font-size:.8rem;color:#999;margin-bottom:6px;display:flex;justify-content:space-between}
+.progress-bar{height:6px;background:#333;border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--highlight));border-radius:3px;transition:width .4s ease}
+
+/* Module content */
+.module{display:none;animation:fadeIn .3s ease}
+.module.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.module-tag{font-size:.75rem;text-transform:uppercase;letter-spacing:1px;color:var(--highlight);margin-bottom:4px}
+.module h2{font-size:1.4rem;font-weight:700;margin-bottom:16px}
+.module-content{background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);padding:20px;margin-bottom:24px;font-size:.95rem;line-height:1.7}
+.module-content p{margin-bottom:12px}
+.module-content p:last-child{margin-bottom:0}
+.module-content ul{padding-left:20px;margin-bottom:12px}
+.module-content li{margin-bottom:6px}
+.key-msg{background:rgba(0,112,224,.12);border-left:3px solid var(--accent);padding:12px 16px;border-radius:0 8px 8px 0;margin:12px 0;font-size:.9rem}
+
+/* Questions */
+.question-block{background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+.question-block h3{font-size:1rem;font-weight:600;margin-bottom:14px;line-height:1.5}
+.options{display:flex;flex-direction:column;gap:8px}
+.opt-btn{background:#222;border:2px solid #333;border-radius:8px;padding:12px 16px;color:var(--text);font-size:.9rem;cursor:pointer;text-align:left;transition:border-color .2s,background .2s;line-height:1.4}
+.opt-btn:hover:not(:disabled){border-color:var(--accent);background:#1c1c1c}
+.opt-btn:disabled{cursor:default;opacity:.85}
+.opt-btn.selected-correct{border-color:var(--correct);background:rgba(34,197,94,.12)}
+.opt-btn.selected-wrong{border-color:var(--wrong);background:rgba(239,68,68,.12)}
+.opt-btn.reveal-correct{border-color:var(--correct);background:rgba(34,197,94,.08)}
+.feedback{margin-top:12px;padding:12px 16px;border-radius:8px;font-size:.88rem;line-height:1.5;display:none}
+.feedback.show{display:block}
+.feedback.correct{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#86efac}
+.feedback.wrong{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5}
+
+/* Navigation */
+.nav-bar{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding:20px 0 8px;gap:12px}
+.nav-btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:12px 28px;font-size:.95rem;font-weight:600;cursor:pointer;transition:background .2s,transform .1s}
+.nav-btn:hover{background:#005bb5}
+.nav-btn:active{transform:scale(.97)}
+.nav-btn:disabled{background:#333;color:#666;cursor:not-allowed}
+.nav-btn.secondary{background:transparent;border:1px solid #444;color:#ccc}
+.nav-btn.secondary:hover{border-color:var(--accent);color:#fff}
+
+/* Score display */
+.score-display{text-align:center;font-size:.9rem;color:#aaa;padding:8px 0}
+.score-display span{color:var(--highlight);font-weight:700}
+
+/* Results */
+.results-card{background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);padding:32px;text-align:center;margin-bottom:20px}
+.results-card .score-big{font-size:3rem;font-weight:800;color:var(--highlight);margin:12px 0}
+.results-card .score-label{font-size:1rem;color:#aaa}
+.results-card .score-msg{font-size:1.1rem;margin-top:16px;line-height:1.6}
+.recap-list{text-align:left;margin-top:24px}
+.recap-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--card-border);font-size:.88rem;line-height:1.5}
+.recap-item:last-child{border-bottom:none}
+.recap-icon{font-size:1.1rem;flex-shrink:0;margin-top:2px}
+.recap-q{color:#ccc}
+.key-takeaways{background:rgba(0,112,224,.08);border:1px solid rgba(0,112,224,.2);border-radius:var(--radius);padding:20px;margin-top:24px;text-align:left}
+.key-takeaways h3{color:var(--highlight);margin-bottom:12px;font-size:1rem}
+.key-takeaways li{margin-bottom:8px;font-size:.9rem;color:#ccc}
+.restart-btn{margin-top:24px;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:14px 36px;font-size:1rem;font-weight:600;cursor:pointer}
+.restart-btn:hover{background:#005bb5}
+
+/* Intro screen */
+.intro{text-align:center;padding:40px 0}
+.intro h2{font-size:1.8rem;margin-bottom:12px}
+.intro p{color:#aaa;font-size:1rem;max-width:500px;margin:0 auto 24px;line-height:1.7}
+.start-btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:16px 48px;font-size:1.1rem;font-weight:700;cursor:pointer;transition:background .2s,transform .1s}
+.start-btn:hover{background:#005bb5}
+.start-btn:active{transform:scale(.97)}
+
+@media(max-width:480px){
+  .app{padding:12px}
+  .header h1{font-size:1rem}
+  .module h2{font-size:1.2rem}
+  .module-content{padding:16px}
+  .question-block{padding:16px}
+  .nav-btn{padding:12px 20px;font-size:.9rem}
+  .results-card{padding:24px}
+  .results-card .score-big{font-size:2.4rem}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="header">
+    <h1>🛡️ Shadow AI — Stingray</h1>
+    <div class="lang-toggle">
+      <button class="lang-btn active" data-lang="fr" onclick="setLang('fr')">FR</button>
+      <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+    </div>
+  </header>
+
+  <div class="progress-wrap" id="progressWrap" style="display:none">
+    <div class="progress-label">
+      <span id="progressText"></span>
+      <span id="scoreText"></span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  </div>
+
+  <main id="main"></main>
+
+  <div class="nav-bar" id="navBar" style="display:none">
+    <button class="nav-btn secondary" id="prevBtn" onclick="goBack()"></button>
+    <div class="score-display" id="navScore"></div>
+    <button class="nav-btn" id="nextBtn" onclick="goNext()"></button>
+  </div>
+</div>
+
+<script>
+const DATA = {
+  fr: {
+    startTitle: "Formation Shadow AI",
+    startDesc: "Apprenez à reconnaître et éviter les risques liés à l'utilisation non autorisée d'outils d'IA. 6 modules interactifs avec des questions pour valider vos connaissances.",
+    startBtn: "Commencer la formation",
+    prev: "← Précédent",
+    next: "Suivant →",
+    finish: "Voir mes résultats →",
+    moduleLabel: "Module",
+    progressOf: "de",
+    score: "Score",
+    pts: "pts",
+    resultsTitle: "Résultats",
+    resultsGreat: "Excellent ! Vous maîtrisez les bonnes pratiques liées au Shadow AI.",
+    resultsGood: "Bon travail ! Quelques points à revoir, mais vous êtes sur la bonne voie.",
+    resultsRetry: "Des efforts sont nécessaires. Nous vous recommandons de revoir les modules.",
+    recap: "Récapitulatif",
+    keyTitle: "Messages clés à retenir",
+    keys: [
+      "🔐 SSO d'abord — utilisez toujours votre compte Stingray corporatif pour les outils approuvés.",
+      "🎫 Help Desk pour les nouveaux outils — ne jamais utiliser d'outils non approuvés avec les données de l'entreprise.",
+      "❓ En cas de doute — consultez l'équipe TI/Sécurité."
+    ],
+    restart: "Recommencer",
+    modules: [
+      {
+        title: "Qu'est-ce que le Shadow AI ?",
+        content: `<p>Le <strong>Shadow AI</strong> désigne l'utilisation d'outils d'intelligence artificielle non approuvés par l'entreprise, souvent à l'insu du département TI ou Sécurité.</p>
+<p>Cela inclut l'utilisation de :</p>
+<ul>
+<li>ChatGPT, Claude ou Gemini avec un compte personnel</li>
+<li>Des extensions de navigateur IA non vérifiées</li>
+<li>Des applications IA téléchargées sans autorisation</li>
+<li>Des outils trouvés en ligne sans validation TI</li>
+</ul>
+<div class="key-msg">🔐 <strong>SSO d'abord</strong> — Utilisez toujours votre compte corporatif Stingray (SSO) pour accéder aux outils IA approuvés.</div>`,
+        questions: [
+          {
+            q: "Quelle est la meilleure définition du Shadow AI ?",
+            opts: [
+              "Un type d'IA qui fonctionne uniquement dans le dark web",
+              "L'utilisation d'outils IA non approuvés par l'entreprise, sans l'aval de TI/Sécurité",
+              "Un outil IA développé en interne par Stingray",
+              "Un logiciel antivirus basé sur l'IA"
+            ],
+            correct: 1,
+            feedback_correct: "Exact ! Le Shadow AI désigne toute utilisation d'outils IA non sanctionnés par l'entreprise.",
+            feedback_wrong: "La bonne réponse : l'utilisation d'outils IA non approuvés par l'entreprise, sans l'aval de TI/Sécurité."
+          },
+          {
+            q: "Lequel de ces exemples constitue du Shadow AI ?",
+            opts: [
+              "Utiliser Microsoft Copilot avec votre SSO Stingray",
+              "Coller des données clients dans un ChatGPT personnel",
+              "Demander au Help Desk d'évaluer un nouvel outil IA",
+              "Utiliser un outil IA approuvé pour résumer un rapport interne"
+            ],
+            correct: 1,
+            feedback_correct: "Correct ! Utiliser un compte personnel ChatGPT pour traiter des données d'entreprise est un exemple classique de Shadow AI.",
+            feedback_wrong: "Coller des données clients dans un ChatGPT personnel est un exemple classique de Shadow AI."
+          }
+        ]
+      },
+      {
+        title: "Les risques réels",
+        content: `<p>Le Shadow AI expose l'entreprise à des risques concrets et sérieux :</p>
+<ul>
+<li><strong>Fuite de données</strong> — les données envoyées à des outils non approuvés peuvent être stockées, utilisées pour l'entraînement ou exposées.</li>
+<li><strong>Non-conformité</strong> — violation des politiques internes, des contrats clients et des réglementations (ex. : Loi 25).</li>
+<li><strong>Perte de contrôle</strong> — l'entreprise ne peut pas auditer ou sécuriser ce qu'elle ne connaît pas.</li>
+<li><strong>Risques de réputation</strong> — une fuite de données clients peut gravement nuire à la confiance.</li>
+</ul>
+<div class="key-msg">🎫 <strong>Help Desk pour les nouveaux outils</strong> — Ne jamais utiliser d'outils non approuvés avec les données de l'entreprise.</div>`,
+        questions: [
+          {
+            q: "Sophie colle des données de revenus et des noms de clients dans son compte personnel ChatGPT pour créer un rapport. Est-ce un problème ?",
+            opts: [
+              "Non, tant qu'elle supprime la conversation après",
+              "Peut-être, ça dépend du type de rapport",
+              "Oui, c'est une fuite de données potentielle via un outil non approuvé"
+            ],
+            correct: 2,
+            feedback_correct: "Exact ! Les données envoyées à un outil non approuvé ne sont plus sous le contrôle de l'entreprise, peu importe ce qu'on fait après.",
+            feedback_wrong: "Oui, c'est un problème. Les données envoyées à un outil non approuvé ne sont plus sous le contrôle de l'entreprise, même si la conversation est supprimée."
+          },
+          {
+            q: "Quels types de données sont à risque avec le Shadow AI ?",
+            opts: [
+              "Uniquement les données financières",
+              "Données clients, revenus, contrats, code propriétaire, informations RH — toute donnée d'entreprise",
+              "Seulement les données marquées « confidentiel »",
+              "Aucune, les outils IA modernes sont tous sécurisés"
+            ],
+            correct: 1,
+            feedback_correct: "Correct ! Toute donnée d'entreprise est à risque lorsqu'elle est utilisée dans un outil non approuvé.",
+            feedback_wrong: "Toutes les données d'entreprise sont à risque : clients, revenus, contrats, code, RH, etc."
+          }
+        ]
+      },
+      {
+        title: "Les outils approuvés",
+        content: `<p>Stingray met à disposition des outils IA approuvés et sécurisés. La règle d'or :</p>
+<ul>
+<li><strong>SSO obligatoire</strong> — Connectez-vous toujours avec votre compte corporatif Stingray (SSO). Jamais avec un compte personnel.</li>
+<li><strong>Outils validés par TI</strong> — Seuls les outils évalués et approuvés par l'équipe TI/Sécurité sont autorisés.</li>
+<li><strong>Exemples d'outils approuvés</strong> : Microsoft Copilot (via SSO), GitHub Copilot (licence entreprise), les outils intégrés à notre suite Microsoft 365.</li>
+</ul>
+<div class="key-msg">🔐 <strong>Règle SSO</strong> — Compte corporatif = approuvé. Compte personnel = Shadow AI.</div>`,
+        questions: [
+          {
+            q: "Quelle est la règle concernant le SSO pour les outils IA ?",
+            opts: [
+              "Le SSO est optionnel si l'outil est gratuit",
+              "Il faut toujours utiliser son compte corporatif Stingray (SSO) pour les outils approuvés",
+              "Le SSO est réservé aux gestionnaires",
+              "On peut utiliser le SSO ou un compte personnel, au choix"
+            ],
+            correct: 1,
+            feedback_correct: "Exact ! Le SSO corporatif est obligatoire pour tous les outils IA approuvés.",
+            feedback_wrong: "Le SSO corporatif Stingray est obligatoire pour tous les outils IA approuvés, sans exception."
+          },
+          {
+            q: "Marc découvre un outil IA sur Product Hunt pour analyser des logs serveur. Il l'essaie avec de vrais logs sans en parler à TI. Est-ce un problème ?",
+            opts: [
+              "Non, il fait juste un test rapide",
+              "Non, Product Hunt ne liste que des outils fiables",
+              "Oui, tout outil non approuvé par TI ne doit pas être utilisé avec des données d'entreprise"
+            ],
+            correct: 2,
+            feedback_correct: "Correct ! Même un « test rapide » avec des données réelles dans un outil non approuvé constitue du Shadow AI.",
+            feedback_wrong: "Oui ! Même un test rapide avec des données réelles dans un outil non approuvé constitue du Shadow AI. Il faut contacter le Help Desk d'abord."
+          }
+        ]
+      },
+      {
+        title: "Le bon processus",
+        content: `<p>Vous avez trouvé un outil IA qui pourrait être utile ? Voici le bon processus :</p>
+<ol>
+<li><strong>Contactez le Help Desk</strong> — Soumettez une demande pour évaluation de l'outil.</li>
+<li><strong>L'équipe TI/Sécurité évalue</strong> — Sécurité des données, conformité, intégration SSO.</li>
+<li><strong>Approbation ou refus</strong> — Vous recevez une réponse claire.</li>
+<li><strong>Déploiement sécurisé</strong> — Si approuvé, l'outil est configuré de manière sécurisée.</li>
+</ol>
+<div class="key-msg">❓ <strong>En cas de doute — demandez !</strong> L'équipe TI/Sécurité est là pour vous aider, pas pour vous bloquer.</div>`,
+        questions: [
+          {
+            q: "Quelle est la première étape lorsque vous souhaitez utiliser un nouvel outil IA ?",
+            opts: [
+              "L'installer et le tester rapidement avec des données fictives",
+              "Demander à un collègue s'il l'utilise déjà",
+              "Contacter le Help Desk pour soumettre une demande d'évaluation",
+              "Vérifier les avis sur Google"
+            ],
+            correct: 2,
+            feedback_correct: "Exact ! Le Help Desk est toujours la première étape pour tout nouvel outil.",
+            feedback_wrong: "La première étape est toujours de contacter le Help Desk pour soumettre une demande d'évaluation."
+          },
+          {
+            q: "Quelles données ne doivent JAMAIS être utilisées dans un outil IA non approuvé ?",
+            opts: [
+              "Uniquement les données financières",
+              "Uniquement les données avec le marquage « secret »",
+              "Toute donnée d'entreprise : clients, contrats, code, données internes, RH, etc.",
+              "Seulement les données personnelles des employés"
+            ],
+            correct: 2,
+            feedback_correct: "Correct ! Aucune donnée d'entreprise ne doit être utilisée dans un outil non approuvé, quelle que soit sa nature.",
+            feedback_wrong: "Aucune donnée d'entreprise ne doit transiter par un outil non approuvé — cela inclut tout : clients, contrats, code, données internes, RH, etc."
+          }
+        ]
+      },
+      {
+        title: "Scénarios pratiques",
+        content: `<p>Voyons comment réagir dans des situations concrètes du quotidien. Chaque scénario teste votre capacité à appliquer les bonnes pratiques.</p>
+<div class="key-msg">💡 <strong>Rappel</strong> — Les trois réflexes : SSO d'abord, Help Desk pour les nouveaux outils, en cas de doute → TI/Sécurité.</div>`,
+        questions: [
+          {
+            q: "Un collègue vous envoie par courriel un résumé IA d'un contrat client. Vous remarquez qu'il a utilisé un outil non approuvé. Que faites-vous ?",
+            opts: [
+              "Rien, le résumé est déjà fait et semble correct",
+              "Vous informez votre collègue du risque et lui rappelez le processus (Help Desk), puis vous signalez l'incident à TI/Sécurité",
+              "Vous utilisez le même outil pour vérifier le résumé"
+            ],
+            correct: 1,
+            feedback_correct: "Bonne réaction ! Il faut informer le collègue et signaler l'incident. La bienveillance et la sécurité vont de pair.",
+            feedback_wrong: "La bonne réaction : informer votre collègue du risque, lui rappeler le processus (Help Desk) et signaler l'incident à TI/Sécurité."
+          },
+          {
+            q: "Votre gestionnaire veut une démo demain matin avec un nouvel outil IA que vous avez trouvé en ligne. Que faites-vous ?",
+            opts: [
+              "Vous faites la démo avec des données réelles pour impressionner — c'est urgent",
+              "Vous contactez le Help Desk en urgence, expliquez le besoin, et utilisez uniquement des données fictives en attendant l'approbation",
+              "Vous utilisez l'outil avec votre compte personnel en attendant l'approbation"
+            ],
+            correct: 1,
+            feedback_correct: "Parfait ! L'urgence ne justifie jamais de contourner le processus. Contactez le Help Desk et utilisez des données fictives en attendant.",
+            feedback_wrong: "Même sous pression, le processus reste le même : contactez le Help Desk et n'utilisez que des données fictives en attendant l'approbation."
+          }
+        ]
+      },
+      {
+        title: "Quiz final — Vrai ou Faux",
+        content: `<p>Dernière étape ! Testez vos connaissances avec ces 5 affirmations. Pour chaque une, déterminez si c'est <strong>Vrai</strong> ou <strong>Faux</strong>.</p>`,
+        questions: [
+          {
+            q: "« Utiliser mon ChatGPT personnel pour rédiger un courriel à un client avec ses informations, c'est acceptable. »",
+            opts: ["Vrai", "Faux"],
+            correct: 1,
+            feedback_correct: "Correct — FAUX ! Utiliser un compte personnel avec des données clients est du Shadow AI.",
+            feedback_wrong: "C'est FAUX. Utiliser un compte personnel avec des données clients constitue du Shadow AI et expose l'entreprise à des risques."
+          },
+          {
+            q: "« Utiliser Microsoft Copilot avec mon SSO Stingray pour rédiger un rapport, c'est acceptable. »",
+            opts: ["Vrai", "Faux"],
+            correct: 0,
+            feedback_correct: "Correct — VRAI ! Copilot via SSO est un outil approuvé et sécurisé.",
+            feedback_wrong: "C'est VRAI. Microsoft Copilot avec votre SSO Stingray est un outil approuvé et sécurisé."
+          },
+          {
+            q: "« Coller du code propriétaire Stingray dans un outil IA gratuit en ligne, c'est acceptable. »",
+            opts: ["Vrai", "Faux"],
+            correct: 1,
+            feedback_correct: "Correct — FAUX ! Le code propriétaire ne doit jamais être partagé avec un outil non approuvé.",
+            feedback_wrong: "C'est FAUX. Le code propriétaire ne doit jamais être partagé avec un outil IA non approuvé."
+          },
+          {
+            q: "« Contacter le Help Desk avant d'utiliser un nouvel outil IA est une bonne pratique. »",
+            opts: ["Vrai", "Faux"],
+            correct: 0,
+            feedback_correct: "Correct — VRAI ! Le Help Desk est toujours la première étape.",
+            feedback_wrong: "C'est VRAI. Le Help Desk est toujours la première étape pour tout nouvel outil IA."
+          },
+          {
+            q: "« Les données que j'entre dans un outil IA gratuit restent privées et ne sont pas réutilisées. »",
+            opts: ["Vrai", "Faux"],
+            correct: 1,
+            feedback_correct: "Correct — FAUX ! Les outils gratuits peuvent stocker, analyser et utiliser vos données pour l'entraînement de leurs modèles.",
+            feedback_wrong: "C'est FAUX. Les outils IA gratuits peuvent stocker, analyser et réutiliser vos données, y compris pour l'entraînement de leurs modèles."
+          }
+        ]
+      }
+    ]
+  },
+  en: {
+    startTitle: "Shadow AI Training",
+    startDesc: "Learn to recognize and avoid the risks of unauthorized AI tool usage. 6 interactive modules with questions to validate your knowledge.",
+    startBtn: "Start Training",
+    prev: "← Previous",
+    next: "Next →",
+    finish: "See My Results →",
+    moduleLabel: "Module",
+    progressOf: "of",
+    score: "Score",
+    pts: "pts",
+    resultsTitle: "Results",
+    resultsGreat: "Excellent! You've mastered Shadow AI best practices.",
+    resultsGood: "Good job! A few points to review, but you're on the right track.",
+    resultsRetry: "Some effort needed. We recommend reviewing the modules.",
+    recap: "Recap",
+    keyTitle: "Key Takeaways",
+    keys: [
+      "🔐 SSO first — always use your Stingray corporate account for approved tools.",
+      "🎫 Help Desk for new tools — never use unapproved tools with company data.",
+      "❓ When in doubt — ask IT/Security."
+    ],
+    restart: "Start Over",
+    modules: [
+      {
+        title: "What is Shadow AI?",
+        content: `<p><strong>Shadow AI</strong> refers to the use of AI tools that are not approved by the company, often without the knowledge of IT or Security.</p>
+<p>This includes using:</p>
+<ul>
+<li>ChatGPT, Claude, or Gemini with a personal account</li>
+<li>Unverified AI browser extensions</li>
+<li>AI apps downloaded without authorization</li>
+<li>Online AI tools without IT validation</li>
+</ul>
+<div class="key-msg">🔐 <strong>SSO first</strong> — Always use your Stingray corporate account (SSO) to access approved AI tools.</div>`,
+        questions: [
+          {
+            q: "What is the best definition of Shadow AI?",
+            opts: [
+              "A type of AI that only works on the dark web",
+              "The use of AI tools not approved by the company, without IT/Security approval",
+              "An AI tool developed internally by Stingray",
+              "An AI-based antivirus software"
+            ],
+            correct: 1,
+            feedback_correct: "Correct! Shadow AI refers to any use of AI tools not sanctioned by the company.",
+            feedback_wrong: "The correct answer: the use of AI tools not approved by the company, without IT/Security approval."
+          },
+          {
+            q: "Which of these is an example of Shadow AI?",
+            opts: [
+              "Using Microsoft Copilot with your Stingray SSO",
+              "Pasting client data into a personal ChatGPT",
+              "Asking the Help Desk to evaluate a new AI tool",
+              "Using an approved AI tool to summarize an internal report"
+            ],
+            correct: 1,
+            feedback_correct: "Correct! Using a personal ChatGPT account to process company data is a classic example of Shadow AI.",
+            feedback_wrong: "Pasting client data into a personal ChatGPT is a classic example of Shadow AI."
+          }
+        ]
+      },
+      {
+        title: "Real Risks",
+        content: `<p>Shadow AI exposes the company to concrete and serious risks:</p>
+<ul>
+<li><strong>Data leaks</strong> — Data sent to unapproved tools can be stored, used for training, or exposed.</li>
+<li><strong>Non-compliance</strong> — Violation of internal policies, client contracts, and regulations.</li>
+<li><strong>Loss of control</strong> — The company cannot audit or secure what it doesn't know about.</li>
+<li><strong>Reputation risks</strong> — A client data leak can seriously damage trust.</li>
+</ul>
+<div class="key-msg">🎫 <strong>Help Desk for new tools</strong> — Never use unapproved tools with company data.</div>`,
+        questions: [
+          {
+            q: "Sophie pastes revenue data and client names into her personal ChatGPT to create a report. Is this a problem?",
+            opts: [
+              "No, as long as she deletes the conversation afterward",
+              "Maybe, it depends on the type of report",
+              "Yes, it's a potential data leak through an unapproved tool"
+            ],
+            correct: 2,
+            feedback_correct: "Correct! Data sent to an unapproved tool is no longer under the company's control, regardless of what you do afterward.",
+            feedback_wrong: "Yes, it's a problem. Data sent to an unapproved tool is no longer under the company's control, even if the conversation is deleted."
+          },
+          {
+            q: "What types of data are at risk with Shadow AI?",
+            opts: [
+              "Only financial data",
+              "Client data, revenue, contracts, proprietary code, HR information — all company data",
+              "Only data marked 'confidential'",
+              "None, modern AI tools are all secure"
+            ],
+            correct: 1,
+            feedback_correct: "Correct! All company data is at risk when used in an unapproved tool.",
+            feedback_wrong: "All company data is at risk: clients, revenue, contracts, code, HR, etc."
+          }
+        ]
+      },
+      {
+        title: "Approved Tools",
+        content: `<p>Stingray provides approved and secure AI tools. The golden rule:</p>
+<ul>
+<li><strong>SSO mandatory</strong> — Always log in with your Stingray corporate account (SSO). Never with a personal account.</li>
+<li><strong>IT-validated tools</strong> — Only tools evaluated and approved by IT/Security are authorized.</li>
+<li><strong>Examples of approved tools</strong>: Microsoft Copilot (via SSO), GitHub Copilot (enterprise license), tools integrated into our Microsoft 365 suite.</li>
+</ul>
+<div class="key-msg">🔐 <strong>SSO Rule</strong> — Corporate account = approved. Personal account = Shadow AI.</div>`,
+        questions: [
+          {
+            q: "What is the SSO rule for AI tools?",
+            opts: [
+              "SSO is optional if the tool is free",
+              "You must always use your Stingray corporate account (SSO) for approved tools",
+              "SSO is reserved for managers",
+              "You can use SSO or a personal account, your choice"
+            ],
+            correct: 1,
+            feedback_correct: "Correct! Corporate SSO is mandatory for all approved AI tools.",
+            feedback_wrong: "Stingray corporate SSO is mandatory for all approved AI tools, no exceptions."
+          },
+          {
+            q: "Marc discovers an AI tool on Product Hunt for analyzing server logs. He tries it with real logs without telling IT. Is this a problem?",
+            opts: [
+              "No, he's just running a quick test",
+              "No, Product Hunt only lists reliable tools",
+              "Yes, any unapproved tool must not be used with company data"
+            ],
+            correct: 2,
+            feedback_correct: "Correct! Even a 'quick test' with real data in an unapproved tool constitutes Shadow AI.",
+            feedback_wrong: "Yes! Even a quick test with real data in an unapproved tool constitutes Shadow AI. Contact the Help Desk first."
+          }
+        ]
+      },
+      {
+        title: "The Right Process",
+        content: `<p>Found an AI tool that could be useful? Here's the right process:</p>
+<ol>
+<li><strong>Contact the Help Desk</strong> — Submit a request for tool evaluation.</li>
+<li><strong>IT/Security evaluates</strong> — Data security, compliance, SSO integration.</li>
+<li><strong>Approval or rejection</strong> — You receive a clear answer.</li>
+<li><strong>Secure deployment</strong> — If approved, the tool is configured securely.</li>
+</ol>
+<div class="key-msg">❓ <strong>When in doubt — ask!</strong> IT/Security is here to help you, not block you.</div>`,
+        questions: [
+          {
+            q: "What is the first step when you want to use a new AI tool?",
+            opts: [
+              "Install it and quickly test with dummy data",
+              "Ask a colleague if they already use it",
+              "Contact the Help Desk to submit an evaluation request",
+              "Check reviews on Google"
+            ],
+            correct: 2,
+            feedback_correct: "Correct! The Help Desk is always the first step for any new tool.",
+            feedback_wrong: "The first step is always to contact the Help Desk to submit an evaluation request."
+          },
+          {
+            q: "What data should NEVER be used in an unapproved AI tool?",
+            opts: [
+              "Only financial data",
+              "Only data marked 'secret'",
+              "All company data: clients, contracts, code, internal data, HR, etc.",
+              "Only employee personal data"
+            ],
+            correct: 2,
+            feedback_correct: "Correct! No company data should be used in an unapproved tool, regardless of its nature.",
+            feedback_wrong: "No company data should go through an unapproved tool — this includes everything: clients, contracts, code, internal data, HR, etc."
+          }
+        ]
+      },
+      {
+        title: "Practical Scenarios",
+        content: `<p>Let's see how to react in real-world everyday situations. Each scenario tests your ability to apply best practices.</p>
+<div class="key-msg">💡 <strong>Remember</strong> — The three reflexes: SSO first, Help Desk for new tools, when in doubt → IT/Security.</div>`,
+        questions: [
+          {
+            q: "A colleague sends you an AI-generated summary of a client contract by email. You notice they used an unapproved tool. What do you do?",
+            opts: [
+              "Nothing, the summary is already done and looks correct",
+              "You inform your colleague of the risk, remind them of the process (Help Desk), and report the incident to IT/Security",
+              "You use the same tool to verify the summary"
+            ],
+            correct: 1,
+            feedback_correct: "Good reaction! You should inform the colleague and report the incident. Being helpful and being secure go hand in hand.",
+            feedback_wrong: "The right reaction: inform your colleague of the risk, remind them of the process (Help Desk), and report the incident to IT/Security."
+          },
+          {
+            q: "Your manager wants a demo tomorrow morning with a new AI tool you found online. What do you do?",
+            opts: [
+              "You do the demo with real data to impress — it's urgent",
+              "You contact the Help Desk urgently, explain the need, and use only dummy data while awaiting approval",
+              "You use the tool with your personal account while awaiting approval"
+            ],
+            correct: 1,
+            feedback_correct: "Perfect! Urgency never justifies bypassing the process. Contact the Help Desk and use only dummy data while awaiting approval.",
+            feedback_wrong: "Even under pressure, the process remains the same: contact the Help Desk and use only dummy data while awaiting approval."
+          }
+        ]
+      },
+      {
+        title: "Final Quiz — True or False",
+        content: `<p>Last step! Test your knowledge with these 5 statements. For each one, determine if it's <strong>True</strong> or <strong>False</strong>.</p>`,
+        questions: [
+          {
+            q: "\"Using my personal ChatGPT to draft an email to a client with their information is acceptable.\"",
+            opts: ["True", "False"],
+            correct: 1,
+            feedback_correct: "Correct — FALSE! Using a personal account with client data is Shadow AI.",
+            feedback_wrong: "It's FALSE. Using a personal account with client data constitutes Shadow AI and exposes the company to risks."
+          },
+          {
+            q: "\"Using Microsoft Copilot with my Stingray SSO to write a report is acceptable.\"",
+            opts: ["True", "False"],
+            correct: 0,
+            feedback_correct: "Correct — TRUE! Copilot via SSO is an approved and secure tool.",
+            feedback_wrong: "It's TRUE. Microsoft Copilot with your Stingray SSO is an approved and secure tool."
+          },
+          {
+            q: "\"Pasting Stingray proprietary code into a free online AI tool is acceptable.\"",
+            opts: ["True", "False"],
+            correct: 1,
+            feedback_correct: "Correct — FALSE! Proprietary code should never be shared with an unapproved tool.",
+            feedback_wrong: "It's FALSE. Proprietary code should never be shared with an unapproved AI tool."
+          },
+          {
+            q: "\"Contacting the Help Desk before using a new AI tool is good practice.\"",
+            opts: ["True", "False"],
+            correct: 0,
+            feedback_correct: "Correct — TRUE! The Help Desk is always the first step.",
+            feedback_wrong: "It's TRUE. The Help Desk is always the first step for any new AI tool."
+          },
+          {
+            q: "\"Data I enter into a free AI tool stays private and is not reused.\"",
+            opts: ["True", "False"],
+            correct: 1,
+            feedback_correct: "Correct — FALSE! Free tools may store, analyze, and use your data for training their models.",
+            feedback_wrong: "It's FALSE. Free AI tools may store, analyze, and reuse your data, including for training their models."
+          }
+        ]
+      }
+    ]
+  }
+};
+
+let lang = 'fr';
+let currentModule = -1; // -1 = intro
+let answers = [];       // [{moduleIdx, questionIdx, selectedOpt, correct}]
+let totalQuestions = 0;
+
+function t() { return DATA[lang]; }
+
+function setLang(l) {
+  lang = l;
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === l));
+  document.documentElement.lang = l;
+  render();
+}
+
+function getModules() { return t().modules; }
+
+function countTotal() {
+  let c = 0;
+  getModules().forEach(m => c += m.questions.length);
+  return c;
+}
+
+function getScore() {
+  return answers.filter(a => a.correct).length;
+}
+
+function getAnsweredInModule(mIdx) {
+  return answers.filter(a => a.moduleIdx === mIdx);
+}
+
+function allModuleAnswered(mIdx) {
+  const mod = getModules()[mIdx];
+  return getAnsweredInModule(mIdx).length === mod.questions.length;
+}
+
+function findAnswer(mIdx, qIdx) {
+  return answers.find(a => a.moduleIdx === mIdx && a.questionIdx === qIdx);
+}
+
+function render() {
+  totalQuestions = countTotal();
+  if (currentModule === -1) {
+    renderIntro();
+  } else if (currentModule >= getModules().length) {
+    renderResults();
+  } else {
+    renderModule(currentModule);
+  }
+}
+
+function renderIntro() {
+  document.getElementById('progressWrap').style.display = 'none';
+  document.getElementById('navBar').style.display = 'none';
+  document.getElementById('main').innerHTML = `
+    <div class="intro">
+      <h2>${t().startTitle}</h2>
+      <p>${t().startDesc}</p>
+      <button class="start-btn" onclick="startQuiz()">${t().startBtn}</button>
+    </div>`;
+}
+
+function startQuiz() {
+  currentModule = 0;
+  answers = [];
+  render();
+}
+
+function renderModule(mIdx) {
+  const mod = getModules()[mIdx];
+  const d = t();
+  document.getElementById('progressWrap').style.display = 'block';
+  document.getElementById('navBar').style.display = 'flex';
+
+  const answeredTotal = answers.length;
+  const pct = totalQuestions > 0 ? (answeredTotal / totalQuestions * 100) : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = `${d.moduleLabel} ${mIdx + 1} ${d.progressOf} ${getModules().length}`;
+  document.getElementById('scoreText').textContent = `${d.score}: ${getScore()} / ${totalQuestions} ${d.pts}`;
+
+  let html = `<div class="module active">
+    <div class="module-tag">${d.moduleLabel} ${mIdx + 1}</div>
+    <h2>${mod.title}</h2>
+    <div class="module-content">${mod.content}</div>`;
+
+  mod.questions.forEach((question, qIdx) => {
+    const prev = findAnswer(mIdx, qIdx);
+    html += `<div class="question-block" id="q-${mIdx}-${qIdx}">
+      <h3>${qIdx + 1}. ${question.q}</h3>
+      <div class="options">`;
+    question.opts.forEach((opt, oIdx) => {
+      let cls = 'opt-btn';
+      let disabled = '';
+      if (prev) {
+        disabled = 'disabled';
+        if (oIdx === prev.selectedOpt && prev.correct) cls += ' selected-correct';
+        else if (oIdx === prev.selectedOpt && !prev.correct) cls += ' selected-wrong';
+        if (oIdx === question.correct && !prev.correct) cls += ' reveal-correct';
+      }
+      html += `<button class="${cls}" ${disabled} onclick="selectAnswer(${mIdx},${qIdx},${oIdx})">${opt}</button>`;
+    });
+    html += `</div>`;
+    if (prev) {
+      const fbClass = prev.correct ? 'correct' : 'wrong';
+      const fbText = prev.correct ? question.feedback_correct : question.feedback_wrong;
+      html += `<div class="feedback ${fbClass} show">${fbText}</div>`;
+    } else {
+      html += `<div class="feedback" id="fb-${mIdx}-${qIdx}"></div>`;
+    }
+    html += `</div>`;
+  });
+
+  html += `</div>`;
+  document.getElementById('main').innerHTML = html;
+
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  prevBtn.textContent = d.prev;
+  prevBtn.disabled = mIdx === 0;
+
+  const isLast = mIdx === getModules().length - 1;
+  nextBtn.textContent = isLast ? d.finish : d.next;
+  nextBtn.disabled = !allModuleAnswered(mIdx);
+
+  document.getElementById('navScore').innerHTML = '';
+}
+
+function selectAnswer(mIdx, qIdx, oIdx) {
+  if (findAnswer(mIdx, qIdx)) return;
+  const question = getModules()[mIdx].questions[qIdx];
+  const isCorrect = oIdx === question.correct;
+  answers.push({ moduleIdx: mIdx, questionIdx: qIdx, selectedOpt: oIdx, correct: isCorrect });
+  renderModule(mIdx);
+  const el = document.getElementById(`q-${mIdx}-${qIdx}`);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function goNext() {
+  if (currentModule >= 0 && !allModuleAnswered(currentModule)) return;
+  currentModule++;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  render();
+}
+
+function goBack() {
+  if (currentModule > 0) {
+    currentModule--;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    render();
+  }
+}
+
+function renderResults() {
+  const d = t();
+  document.getElementById('navBar').style.display = 'none';
+  document.getElementById('progressFill').style.width = '100%';
+  document.getElementById('progressText').textContent = d.resultsTitle;
+  document.getElementById('scoreText').textContent = `${d.score}: ${getScore()} / ${totalQuestions} ${d.pts}`;
+
+  const pct = totalQuestions > 0 ? Math.round(getScore() / totalQuestions * 100) : 0;
+  let msg = d.resultsRetry;
+  if (pct >= 80) msg = d.resultsGreat;
+  else if (pct >= 50) msg = d.resultsGood;
+
+  let recapHtml = '';
+  getModules().forEach((mod, mIdx) => {
+    mod.questions.forEach((question, qIdx) => {
+      const a = findAnswer(mIdx, qIdx);
+      const icon = a && a.correct ? '✅' : '❌';
+      const fbText = a ? (a.correct ? question.feedback_correct : question.feedback_wrong) : '';
+      recapHtml += `<div class="recap-item">
+        <span class="recap-icon">${icon}</span>
+        <span class="recap-q"><strong>${d.moduleLabel} ${mIdx+1}, Q${qIdx+1}:</strong> ${question.q}<br><em>${fbText}</em></span>
+      </div>`;
+    });
+  });
+
+  let keysHtml = d.keys.map(k => `<li>${k}</li>`).join('');
+
+  document.getElementById('main').innerHTML = `
+    <div class="results-card">
+      <div class="score-label">${d.resultsTitle}</div>
+      <div class="score-big">${getScore()} / ${totalQuestions}</div>
+      <div class="score-label">${pct}%</div>
+      <div class="score-msg">${msg}</div>
+      <div class="recap-list">
+        <h3 style="margin-bottom:12px;color:var(--highlight)">${d.recap}</h3>
+        ${recapHtml}
+      </div>
+      <div class="key-takeaways">
+        <h3>${d.keyTitle}</h3>
+        <ul>${keysHtml}</ul>
+      </div>
+      <button class="restart-btn" onclick="restartQuiz()">${d.restart}</button>
+    </div>`;
+}
+
+function restartQuiz() {
+  currentModule = -1;
+  answers = [];
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
