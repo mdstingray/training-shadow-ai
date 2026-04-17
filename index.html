@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shadow AI — Stingray Training Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0c0c0e;
+  --bg-elevated:#141418;
+  --accent:#0070e0;
+  --accent-hover:#0088ff;
+  --highlight:#5ad0ff;
+  --text:#f4f4f5;
+  --text-muted:#a1a1aa;
+  --card:rgba(24,24,28,.85);
+  --card-border:rgba(255,255,255,.08);
+  --correct:#22c55e;
+  --wrong:#f87171;
+  --radius:16px;
+  --ease-out:cubic-bezier(0.22,1,0.36,1);
+}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Outfit',system-ui,-apple-system,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  line-height:1.65;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--highlight);text-decoration:none;transition:color .2s}
+a:hover{color:#7ddbff}
+
+.bg-glow{
+  position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -20%,rgba(0,112,224,.2),transparent 60%),
+    radial-gradient(ellipse 60% 50% at 100% 10%,rgba(90,208,255,.08),transparent 50%),
+    radial-gradient(ellipse 50% 40% at 0% 80%,rgba(0,112,224,.06),transparent 45%);
+}
+
+.container{max-width:1100px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+
+/* NAV */
+nav{
+  position:sticky;top:0;z-index:100;
+  backdrop-filter:blur(20px) saturate(1.3);
+  -webkit-backdrop-filter:blur(20px) saturate(1.3);
+  background:rgba(12,12,14,.7);
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.nav-inner{
+  max-width:1100px;margin:0 auto;padding:0 24px;
+  display:flex;align-items:center;justify-content:space-between;
+  height:64px;
+}
+.nav-brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.1rem;letter-spacing:-.02em}
+.nav-brand .shield{font-size:1.3rem}
+.nav-links{display:flex;gap:28px;align-items:center}
+.nav-links a{font-size:.88rem;font-weight:500;color:var(--text-muted);transition:color .2s}
+.nav-links a:hover{color:var(--text)}
+.nav-cta{
+  background:linear-gradient(135deg,var(--accent),#0058b8);
+  color:#fff;border:none;padding:9px 20px;border-radius:999px;
+  font-size:.85rem;font-weight:600;cursor:pointer;font-family:inherit;
+  transition:transform .2s var(--ease-out),box-shadow .2s;
+}
+.nav-cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(0,112,224,.4)}
+
+/* HERO */
+.hero{
+  padding:100px 0 80px;
+  text-align:center;
+  position:relative;
+}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(0,112,224,.12);border:1px solid rgba(90,208,255,.22);
+  border-radius:999px;padding:8px 18px;margin-bottom:28px;
+  font-size:.82rem;font-weight:600;color:var(--highlight);
+  letter-spacing:.03em;
+}
+.hero h1{
+  font-size:clamp(2.4rem,6vw,4.2rem);
+  font-weight:900;letter-spacing:-.04em;line-height:1.1;
+  margin-bottom:20px;
+  background:linear-gradient(135deg,#fff 20%,var(--highlight) 80%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.hero p{
+  max-width:600px;margin:0 auto 40px;
+  font-size:1.15rem;color:var(--text-muted);line-height:1.7;
+}
+.hero-actions{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+.btn-primary{
+  background:linear-gradient(135deg,var(--accent),#0058b8);
+  color:#fff;border:none;padding:14px 32px;border-radius:999px;
+  font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit;
+  transition:transform .25s var(--ease-out),box-shadow .25s;
+  box-shadow:0 4px 20px rgba(0,112,224,.35);
+}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,112,224,.5)}
+.btn-secondary{
+  background:rgba(255,255,255,.06);color:var(--text);
+  border:1px solid rgba(255,255,255,.12);padding:14px 32px;border-radius:999px;
+  font-size:1rem;font-weight:600;cursor:pointer;font-family:inherit;
+  transition:transform .25s var(--ease-out),background .25s;
+}
+.btn-secondary:hover{transform:translateY(-2px);background:rgba(255,255,255,.1)}
+
+/* STATS BAR */
+.stats-bar{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+  background:rgba(255,255,255,.06);border-radius:var(--radius);overflow:hidden;
+  margin-bottom:100px;
+}
+.stat-item{
+  background:var(--bg-elevated);padding:28px 20px;text-align:center;
+  transition:background .3s;
+}
+.stat-item:hover{background:rgba(24,24,28,.95)}
+.stat-num{font-size:2rem;font-weight:900;color:var(--highlight);letter-spacing:-.03em;display:block}
+.stat-label{font-size:.82rem;color:var(--text-muted);margin-top:4px;font-weight:500}
+
+/* SECTION TITLES */
+.section-tag{
+  font-size:.72rem;text-transform:uppercase;letter-spacing:.16em;
+  color:var(--highlight);font-weight:700;margin-bottom:10px;
+}
+.section-title{
+  font-size:clamp(1.6rem,3.5vw,2.4rem);font-weight:800;
+  letter-spacing:-.03em;line-height:1.2;margin-bottom:16px;
+}
+.section-desc{font-size:1.05rem;color:var(--text-muted);max-width:560px;line-height:1.7}
+
+/* FEATURES */
+.features{padding:0 0 100px}
+.features-header{margin-bottom:56px}
+.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px}
+.feature-card{
+  background:var(--card);
+  backdrop-filter:blur(12px);
+  border:1px solid var(--card-border);
+  border-radius:var(--radius);
+  padding:32px 28px;
+  transition:transform .3s var(--ease-out),border-color .3s,box-shadow .3s;
+  position:relative;overflow:hidden;
+}
+.feature-card::before{
+  content:'';position:absolute;inset:0 0 auto 0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(90,208,255,.3),transparent);
+}
+.feature-card:hover{
+  transform:translateY(-4px);
+  border-color:rgba(90,208,255,.15);
+  box-shadow:0 16px 48px rgba(0,0,0,.3);
+}
+.feature-icon{
+  width:48px;height:48px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.4rem;margin-bottom:20px;
+  background:linear-gradient(135deg,rgba(0,112,224,.2),rgba(90,208,255,.1));
+  border:1px solid rgba(90,208,255,.15);
+}
+.feature-card h3{font-size:1.1rem;font-weight:700;margin-bottom:10px;letter-spacing:-.01em}
+.feature-card p{font-size:.92rem;color:var(--text-muted);line-height:1.65}
+
+/* MODULES */
+.modules{padding:0 0 100px}
+.modules-header{margin-bottom:56px}
+.module-list{display:flex;flex-direction:column;gap:12px}
+.module-row{
+  display:flex;align-items:center;gap:20px;
+  background:var(--card);border:1px solid var(--card-border);
+  border-radius:var(--radius);padding:22px 28px;
+  transition:transform .25s var(--ease-out),border-color .25s;
+  cursor:default;
+}
+.module-row:hover{transform:translateX(6px);border-color:rgba(90,208,255,.18)}
+.module-num{
+  min-width:42px;height:42px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.85rem;font-weight:800;
+  background:linear-gradient(135deg,var(--accent),#0058b8);color:#fff;
+  flex-shrink:0;
+}
+.module-info{flex:1;min-width:0}
+.module-info h4{font-size:1rem;font-weight:700;letter-spacing:-.01em;margin-bottom:2px}
+.module-info p{font-size:.85rem;color:var(--text-muted)}
+.module-q-count{
+  font-size:.75rem;font-weight:600;color:var(--highlight);
+  background:rgba(0,112,224,.12);border:1px solid rgba(90,208,255,.18);
+  border-radius:999px;padding:6px 14px;white-space:nowrap;
+}
+
+/* INTERACTIVE DEMO */
+.demo{padding:0 0 100px}
+.demo-header{margin-bottom:40px}
+.demo-container{
+  max-width:700px;
+  background:var(--card);border:1px solid var(--card-border);
+  border-radius:var(--radius);overflow:hidden;
+  box-shadow:0 16px 64px rgba(0,0,0,.4);
+  position:relative;
+}
+.demo-container::before{
+  content:'';position:absolute;inset:0 0 auto 0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(90,208,255,.4),transparent);
+}
+.demo-topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 24px;border-bottom:1px solid rgba(255,255,255,.06);
+  background:rgba(0,0,0,.3);
+}
+.demo-topbar-left{display:flex;align-items:center;gap:10px}
+.demo-topbar-left .shield{font-size:1.1rem}
+.demo-topbar-left span{font-size:.88rem;font-weight:700}
+.demo-lang{
+  display:flex;gap:0;border:1px solid rgba(255,255,255,.12);
+  border-radius:999px;overflow:hidden;background:rgba(0,0,0,.25);
+}
+.demo-lang button{
+  background:transparent;color:var(--text);border:none;
+  padding:6px 14px;cursor:pointer;font-size:.78rem;font-weight:600;
+  transition:background .25s,color .2s;font-family:inherit;
+}
+.demo-lang button.active{
+  background:linear-gradient(180deg,var(--accent),#0058b8);color:#fff;
+  box-shadow:0 2px 8px rgba(0,112,224,.35);
+}
+.demo-body{padding:32px 28px}
+.demo-progress{margin-bottom:24px}
+.demo-progress-label{
+  display:flex;justify-content:space-between;
+  font-size:.78rem;color:var(--text-muted);margin-bottom:8px;font-weight:500;
+}
+.demo-progress-bar{
+  height:8px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden;
+}
+.demo-progress-fill{
+  height:100%;width:0%;
+  background:linear-gradient(90deg,var(--accent),var(--highlight),#7ddbff);
+  border-radius:999px;transition:width .65s var(--ease-out);
+  box-shadow:0 0 16px rgba(90,208,255,.3);
+}
+.demo-module-tag{
+  font-size:.7rem;text-transform:uppercase;letter-spacing:.14em;
+  color:var(--highlight);font-weight:700;margin-bottom:8px;
+}
+.demo-question{font-size:1.08rem;font-weight:700;margin-bottom:24px;line-height:1.45;letter-spacing:-.01em}
+.demo-options{display:flex;flex-direction:column;gap:10px}
+.demo-opt{
+  display:flex;align-items:flex-start;gap:14px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
+  border-radius:12px;padding:16px 18px;cursor:pointer;
+  transition:transform .2s var(--ease-out),border-color .2s,background .2s,box-shadow .2s;
+  text-align:left;font-family:inherit;color:var(--text);font-size:.92rem;line-height:1.55;
+}
+.demo-opt:hover:not(.answered){
+  transform:translateY(-2px);border-color:rgba(90,208,255,.25);
+  background:rgba(0,112,224,.08);box-shadow:0 8px 24px rgba(0,0,0,.2);
+}
+.demo-opt .letter{
+  min-width:28px;height:28px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.78rem;font-weight:700;flex-shrink:0;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);
+  transition:background .2s,border-color .2s,color .2s;
+}
+.demo-opt.correct-choice{
+  border-color:rgba(34,197,94,.4);background:rgba(34,197,94,.1);
+  transform:none;cursor:default;
+}
+.demo-opt.correct-choice .letter{background:var(--correct);border-color:var(--correct);color:#fff}
+.demo-opt.wrong-choice{
+  border-color:rgba(248,113,113,.4);background:rgba(248,113,113,.08);
+  transform:none;cursor:default;
+}
+.demo-opt.wrong-choice .letter{background:var(--wrong);border-color:var(--wrong);color:#fff}
+.demo-opt.dim{opacity:.5;cursor:default}
+.demo-feedback{
+  margin-top:20px;padding:16px 20px;border-radius:12px;
+  font-size:.9rem;line-height:1.6;
+  animation:fadeUp .35s var(--ease-out) both;
+  display:none;
+}
+.demo-feedback.show{display:block}
+.demo-feedback.correct{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);color:#dff6e7}
+.demo-feedback.wrong{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);color:#fecaca}
+.demo-next-btn{
+  margin-top:20px;
+  background:linear-gradient(135deg,var(--accent),#0058b8);
+  color:#fff;border:none;padding:12px 24px;border-radius:999px;
+  font-size:.9rem;font-weight:600;cursor:pointer;font-family:inherit;
+  transition:transform .2s var(--ease-out),box-shadow .2s;
+  display:none;
+}
+.demo-next-btn.show{display:inline-block}
+.demo-next-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(0,112,224,.4)}
+.demo-results{display:none;text-align:center;padding:20px 0}
+.demo-results h3{font-size:1.6rem;font-weight:800;margin-bottom:10px}
+.demo-results .score-circle{
+  width:120px;height:120px;border-radius:50%;margin:24px auto;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,rgba(0,112,224,.2),rgba(90,208,255,.1));
+  border:3px solid var(--highlight);
+}
+.demo-results .score-circle .big{font-size:2rem;font-weight:900;color:var(--highlight)}
+.demo-results .score-circle .small{font-size:.82rem;color:var(--text-muted);font-weight:500}
+.demo-results p{color:var(--text-muted);font-size:.95rem;margin-top:16px;max-width:420px;margin-left:auto;margin-right:auto}
+.demo-restart{
+  margin-top:24px;
+  background:rgba(255,255,255,.06);color:var(--text);
+  border:1px solid rgba(255,255,255,.12);padding:12px 28px;border-radius:999px;
+  font-size:.9rem;font-weight:600;cursor:pointer;font-family:inherit;
+  transition:transform .2s var(--ease-out),background .2s;
+}
+.demo-restart:hover{transform:translateY(-1px);background:rgba(255,255,255,.1)}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* HOW IT WORKS */
+.how{padding:0 0 100px}
+.how-header{margin-bottom:56px}
+.how-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;counter-reset:step}
+.how-step{
+  position:relative;padding:28px 24px 24px;
+  background:var(--card);border:1px solid var(--card-border);
+  border-radius:var(--radius);
+  transition:transform .25s var(--ease-out),border-color .25s;
+}
+.how-step:hover{transform:translateY(-3px);border-color:rgba(90,208,255,.15)}
+.how-step::before{
+  counter-increment:step;content:counter(step);
+  position:absolute;top:-14px;left:20px;
+  width:28px;height:28px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.78rem;font-weight:800;
+  background:linear-gradient(135deg,var(--accent),#0058b8);color:#fff;
+}
+.how-step h4{font-size:.95rem;font-weight:700;margin-bottom:8px}
+.how-step p{font-size:.88rem;color:var(--text-muted);line-height:1.6}
+
+/* KEY MESSAGES */
+.keys{padding:0 0 100px}
+.keys-header{margin-bottom:48px}
+.keys-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.key-card{
+  display:flex;align-items:flex-start;gap:16px;
+  background:linear-gradient(135deg,rgba(0,112,224,.08),rgba(90,208,255,.04));
+  border-left:4px solid var(--accent);
+  border-radius:0 var(--radius) var(--radius) 0;
+  padding:22px 24px;
+  transition:transform .25s var(--ease-out);
+}
+.key-card:hover{transform:translateX(4px)}
+.key-card .key-emoji{font-size:1.4rem;flex-shrink:0;margin-top:2px}
+.key-card p{font-size:.92rem;line-height:1.6}
+.key-card strong{color:var(--highlight)}
+
+/* FOOTER */
+footer{
+  border-top:1px solid rgba(255,255,255,.06);
+  padding:40px 0;text-align:center;
+}
+footer p{font-size:.85rem;color:var(--text-muted)}
+footer .heart{color:var(--wrong)}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  .stats-bar{grid-template-columns:repeat(2,1fr)}
+  .nav-links{display:none}
+  .hero{padding:60px 0 50px}
+  .demo-body{padding:24px 20px}
+  .module-row{flex-wrap:wrap}
+  .module-q-count{margin-top:4px}
+}
+@media(max-width:480px){
+  .stats-bar{grid-template-columns:1fr}
+  .hero-actions{flex-direction:column;align-items:center}
+}
+</style>
+</head>
+<body>
+<div class="bg-glow"></div>
+
+<nav>
+  <div class="nav-inner">
+    <div class="nav-brand"><span class="shield">&#128737;</span> Shadow AI — Stingray</div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#modules">Modules</a>
+      <a href="#demo">Try It</a>
+      <a href="#how">How It Works</a>
+    </div>
+    <button class="nav-cta" onclick="document.getElementById('demo').scrollIntoView({behavior:'smooth'})">Try the Demo</button>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-badge">&#9889; Stingray Town Hall 2026</div>
+    <h1>Shadow AI<br>Awareness Training</h1>
+    <p>6 minutes of scenario-based micro-learning to recognize, prevent, and manage unapproved AI tool usage across your organization. Bilingual. Interactive. Built for real situations.</p>
+    <div class="hero-actions">
+      <button class="btn-primary" onclick="document.getElementById('demo').scrollIntoView({behavior:'smooth'})">Try the Interactive Demo</button>
+      <button class="btn-secondary" onclick="document.getElementById('modules').scrollIntoView({behavior:'smooth'})">Explore Modules</button>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <div class="stats-bar">
+    <div class="stat-item"><span class="stat-num">6</span><span class="stat-label">Learning Modules</span></div>
+    <div class="stat-item"><span class="stat-num">15</span><span class="stat-label">Scenario Questions</span></div>
+    <div class="stat-item"><span class="stat-num">FR/EN</span><span class="stat-label">Bilingual Support</span></div>
+    <div class="stat-item"><span class="stat-num">~6 min</span><span class="stat-label">To Complete</span></div>
+  </div>
+
+  <!-- FEATURES -->
+  <section class="features" id="features">
+    <div class="features-header">
+      <div class="section-tag">Platform Features</div>
+      <div class="section-title">More than a quiz.<br>A learning experience.</div>
+      <p class="section-desc">Built to engage employees with realistic scenarios, not boring compliance checkboxes.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">&#127919;</div>
+        <h3>Scenario-Based Learning</h3>
+        <p>Every question is grounded in a real workplace situation employees actually face — from midnight deadlines to "helpful" browser extensions.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128274;</div>
+        <h3>Magic Link Access</h3>
+        <p>No passwords, no friction. Each participant gets a unique code link. Open it, start learning. Admin imports users via CSV in seconds.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#127760;</div>
+        <h3>Fully Bilingual (FR/EN)</h3>
+        <p>Toggle between French and English with a single click. All content, feedback, and explanations are available in both languages.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128200;</div>
+        <h3>Admin Dashboard</h3>
+        <p>Track completion rates, scores, and timing per campaign. Filter by status, export CSV reports, and manage deadlines from one place.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128161;</div>
+        <h3>Detailed Explanations</h3>
+        <p>After each answer, see why every option is right or wrong. Teaching happens at the point of decision, not in a separate handbook.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128640;</div>
+        <h3>Campaign Management</h3>
+        <p>Create campaigns with deadlines, import participants via CSV, and deploy targeted training rollouts — perfect for Town Halls or onboarding.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODULES -->
+  <section class="modules" id="modules">
+    <div class="modules-header">
+      <div class="section-tag">Curriculum</div>
+      <div class="section-title">6 modules, 15 questions,<br>one calibrated compass.</div>
+      <p class="section-desc">Each module tackles a specific Shadow AI risk area with context, scenarios, and actionable takeaways.</p>
+    </div>
+    <div class="module-list">
+      <div class="module-row">
+        <div class="module-num">1</div>
+        <div class="module-info">
+          <h4>How Data Leaks in 30 Seconds</h4>
+          <p>The 3 ingredients of Shadow AI — through Lena's story, where a simple copy-paste crosses the line.</p>
+        </div>
+        <span class="module-q-count">2 questions</span>
+      </div>
+      <div class="module-row">
+        <div class="module-num">2</div>
+        <div class="module-info">
+          <h4>Where Your Prompt Actually Goes</h4>
+          <p>The 4 invisible layers your data traverses — transit, logs, training, and human review.</p>
+        </div>
+        <span class="module-q-count">2 questions</span>
+      </div>
+      <div class="module-row">
+        <div class="module-num">3</div>
+        <div class="module-info">
+          <h4>Your Approved Toolbox</h4>
+          <p>Sonata, GitHub Copilot Enterprise, and why SSO equals trust — no SSO means Shadow AI by default.</p>
+        </div>
+        <span class="module-q-count">2 questions</span>
+      </div>
+      <div class="module-row">
+        <div class="module-num">4</div>
+        <div class="module-info">
+          <h4>Gray Zone: Traps Careful People Fall Into</h4>
+          <p>"I anonymized it" — "It's just a screenshot" — "It's only an extension." The 3 most common rationalizations.</p>
+        </div>
+        <span class="module-q-count">2 questions</span>
+      </div>
+      <div class="module-row">
+        <div class="module-num">5</div>
+        <div class="module-info">
+          <h4>Under Pressure, Without Caving</h4>
+          <p>When your manager says "just use your personal ChatGPT" — how to protect data and still deliver.</p>
+        </div>
+        <span class="module-q-count">2 questions</span>
+      </div>
+      <div class="module-row">
+        <div class="module-num">6</div>
+        <div class="module-info">
+          <h4>Your Shadow AI Compass</h4>
+          <p>Capstone: 5 rapid-fire decisions drawn from real Stingray scenarios. Is your compass calibrated?</p>
+        </div>
+        <span class="module-q-count">5 questions</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- INTERACTIVE DEMO -->
+  <section class="demo" id="demo">
+    <div class="demo-header">
+      <div class="section-tag">Interactive Demo</div>
+      <div class="section-title">Try it yourself.</div>
+      <p class="section-desc">Sample 3 questions from the training. See the real quiz experience — feedback and explanations included.</p>
+    </div>
+    <div class="demo-container">
+      <div class="demo-topbar">
+        <div class="demo-topbar-left"><span class="shield">&#128737;</span><span>Shadow AI — Stingray</span></div>
+        <div class="demo-lang">
+          <button class="active" id="langEn" onclick="setLang('en')">EN</button>
+          <button id="langFr" onclick="setLang('fr')">FR</button>
+        </div>
+      </div>
+      <div class="demo-body">
+        <div class="demo-progress">
+          <div class="demo-progress-label">
+            <span id="demoProgressText">Question 1 of 3</span>
+            <span id="demoScoreText">Score: 0 / 3</span>
+          </div>
+          <div class="demo-progress-bar"><div class="demo-progress-fill" id="demoProgressFill"></div></div>
+        </div>
+        <div id="demoQuiz">
+          <div class="demo-module-tag" id="demoModuleTag">Module 1 — Data Leaks</div>
+          <div class="demo-question" id="demoQuestion"></div>
+          <div class="demo-options" id="demoOptions"></div>
+          <div class="demo-feedback" id="demoFeedback"></div>
+          <button class="demo-next-btn" id="demoNext" onclick="nextDemoQuestion()">Next Question &rarr;</button>
+        </div>
+        <div class="demo-results" id="demoResults">
+          <h3 id="resultsTitle">Training Complete!</h3>
+          <div class="score-circle">
+            <span class="big" id="resultsBig">0/3</span>
+            <span class="small">correct</span>
+          </div>
+          <p id="resultsMsg"></p>
+          <button class="demo-restart" onclick="restartDemo()">Try Again</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="how" id="how">
+    <div class="how-header">
+      <div class="section-tag">Deployment</div>
+      <div class="section-title">From zero to trained<br>in 4 steps.</div>
+      <p class="section-desc">A lightweight Node.js app. No complex infrastructure required.</p>
+    </div>
+    <div class="how-steps">
+      <div class="how-step">
+        <h4>Create a Campaign</h4>
+        <p>Name it, set a deadline, and link it to the Shadow AI quiz from the admin panel.</p>
+      </div>
+      <div class="how-step">
+        <h4>Import Participants</h4>
+        <p>Upload a CSV with names and emails. The platform generates unique access codes automatically.</p>
+      </div>
+      <div class="how-step">
+        <h4>Share Magic Links</h4>
+        <p>Each participant gets a personal URL. No account creation, no passwords — just click and start.</p>
+      </div>
+      <div class="how-step">
+        <h4>Track &amp; Export</h4>
+        <p>Monitor progress in real-time, filter by status, and export results as CSV for reporting.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- KEY MESSAGES -->
+  <section class="keys">
+    <div class="keys-header">
+      <div class="section-tag">Key Takeaways</div>
+      <div class="section-title">Three rules to remember.</div>
+    </div>
+    <div class="keys-grid">
+      <div class="key-card">
+        <span class="key-emoji">&#128274;</span>
+        <p><strong>SSO = trust channel.</strong> No SSO means Shadow AI by default — until IT/Security says otherwise.</p>
+      </div>
+      <div class="key-card">
+        <span class="key-emoji">&#129517;</span>
+        <p><strong>When in doubt, Help Desk first.</strong> Data second. Never the other way around.</p>
+      </div>
+      <div class="key-card">
+        <span class="key-emoji">&#9889;</span>
+        <p><strong>Urgency never justifies a personal account</strong> for work data. It accelerates the right path, not shortcuts.</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <div class="container">
+    <p>Shadow AI Training Platform &mdash; Built for Stingray &mdash; Node.js + Express + SQLite</p>
+  </div>
+</footer>
+
+<script>
+const DEMO_QUESTIONS = {
+  en: [
+    {
+      module: "Module 1 — Data Leaks",
+      q: "In which situation is Shadow AI ALREADY happening?",
+      opts: [
+        "A developer asks GitHub Copilot Enterprise (Stingray license) to generate tests for an internal function.",
+        "A designer pastes a list of employee names into a Chrome extension 'AI Writer' installed this morning, to rephrase the tone.",
+        "A sales rep asks Sonata 'summarize the leave policy' via their Stingray SSO.",
+        "Someone uses an IT-approved AI translator to translate an internal email."
+      ],
+      correct: 1,
+      feedback_correct: "Correct! Unapproved extension + internal HR data = all 3 ingredients of Shadow AI are present.",
+      feedback_wrong: "The right answer is the designer: unapproved extension + HR data = Shadow AI, even if the intent is innocent."
+    },
+    {
+      module: "Module 2 — Where Your Prompt Goes",
+      q: "Camille pastes a prospect list into her personal ChatGPT, then immediately deletes the conversation. Best risk assessment?",
+      opts: [
+        "Zero risk: the conversation is deleted on the user side.",
+        "Reduced risk: acceptable for a one-time use.",
+        "Risk unchanged: the data already left, and what the provider does with it is beyond her control."
+      ],
+      correct: 2,
+      feedback_correct: "Exactly. Deleting on the user side says nothing about server logs, retention, or model training on the provider's end.",
+      feedback_wrong: "The right choice: risk unchanged. Deleting on the user side doesn't erase server logs, retention policies, or provider-side usage."
+    },
+    {
+      module: "Module 4 — Gray Zone Traps",
+      q: "A colleague recommends a Chrome extension 'AI Summarizer' that summarizes the open page. You use your internal CRM. What's the real problem?",
+      opts: [
+        "None — it's just summarizing.",
+        "The extension has access to the page content — including customer data displayed in the CRM — and sends it to an unapproved third party.",
+        "The only risk is that it slows down the browser."
+      ],
+      correct: 1,
+      feedback_correct: "Correct. A 'helpful' extension is often an open door to everything you display on screen.",
+      feedback_wrong: "Right answer: the extension reads the page. So it also reads your CRM's customer data and sends it to the provider."
+    }
+  ],
+  fr: [
+    {
+      module: "Module 1 — Fuite de données",
+      q: "Dans quelle situation y a-t-il DÉJÀ du Shadow AI ?",
+      opts: [
+        "Un développeur demande à GitHub Copilot Entreprise (licence Stingray) de générer des tests pour une fonction interne.",
+        "Une designer colle une liste de noms d'employés dans une extension Chrome « AI Writer » installée ce matin.",
+        "Un·e commercial·e demande à Sonata « résume-moi la politique de congés » via son SSO Stingray.",
+        "Quelqu'un utilise un traducteur IA approuvé par TI pour traduire un email interne."
+      ],
+      correct: 1,
+      feedback_correct: "Exact. Extension non validée + données RH internes = les 3 ingrédients sont là.",
+      feedback_wrong: "La bonne réponse est la designer : extension non validée + données RH = Shadow AI, même si l'intention est innocente."
+    },
+    {
+      module: "Module 2 — Où va votre prompt",
+      q: "Camille colle une liste de prospects dans son ChatGPT perso, puis supprime immédiatement la conversation. Meilleure évaluation du risque ?",
+      opts: [
+        "Risque nul : la conversation est effacée côté utilisateur.",
+        "Risque réduit : c'est acceptable pour un usage ponctuel.",
+        "Risque inchangé : la donnée est déjà sortie, et ce que le fournisseur en fait ensuite n'est pas sous son contrôle."
+      ],
+      correct: 2,
+      feedback_correct: "Exact. Supprimer côté utilisateur ne dit rien des logs, de la rétention ou de l'entraînement côté fournisseur.",
+      feedback_wrong: "Le bon choix : risque inchangé. Supprimer côté utilisateur n'efface pas les logs côté fournisseur."
+    },
+    {
+      module: "Module 4 — Zone grise",
+      q: "Un collègue vous recommande une extension Chrome « AI Summarizer » qui résume la page ouverte. Vous utilisez votre CRM interne. Quel est le vrai problème ?",
+      opts: [
+        "Aucun, c'est juste du résumé.",
+        "L'extension a accès au contenu de la page — donc aux données clients affichées dans le CRM — et les envoie à un tiers non validé.",
+        "Le seul risque est qu'elle ralentisse le navigateur."
+      ],
+      correct: 1,
+      feedback_correct: "Exact. Une extension « utile » est souvent une porte ouverte sur tout ce que vous affichez.",
+      feedback_wrong: "Bonne réponse : l'extension lit la page. Donc elle lit aussi les données clients de votre CRM."
+    }
+  ]
+};
+
+let currentLang = 'en';
+let currentQ = 0;
+let demoScore = 0;
+let answered = false;
+
+function setLang(lang) {
+  currentLang = lang;
+  document.getElementById('langEn').className = lang === 'en' ? 'active' : '';
+  document.getElementById('langFr').className = lang === 'fr' ? 'active' : '';
+  restartDemo();
+}
+
+function renderQuestion() {
+  const qs = DEMO_QUESTIONS[currentLang];
+  if (currentQ >= qs.length) { showResults(); return; }
+  const q = qs[currentQ];
+  answered = false;
+
+  const labels = currentLang === 'en'
+    ? { qOf: `Question ${currentQ + 1} of ${qs.length}`, score: `Score: ${demoScore} / ${qs.length}` }
+    : { qOf: `Question ${currentQ + 1} de ${qs.length}`, score: `Score : ${demoScore} / ${qs.length}` };
+
+  document.getElementById('demoProgressText').textContent = labels.qOf;
+  document.getElementById('demoScoreText').textContent = labels.score;
+  document.getElementById('demoProgressFill').style.width = ((currentQ) / qs.length * 100) + '%';
+  document.getElementById('demoModuleTag').textContent = q.module;
+  document.getElementById('demoQuestion').textContent = q.q;
+
+  const letters = ['A', 'B', 'C', 'D'];
+  const optsHTML = q.opts.map((o, i) =>
+    `<button class="demo-opt" onclick="selectAnswer(${i})"><span class="letter">${letters[i]}</span><span>${o}</span></button>`
+  ).join('');
+  document.getElementById('demoOptions').innerHTML = optsHTML;
+  document.getElementById('demoFeedback').className = 'demo-feedback';
+  document.getElementById('demoFeedback').textContent = '';
+  document.getElementById('demoNext').className = 'demo-next-btn';
+  document.getElementById('demoQuiz').style.display = '';
+  document.getElementById('demoResults').style.display = 'none';
+}
+
+function selectAnswer(idx) {
+  if (answered) return;
+  answered = true;
+  const qs = DEMO_QUESTIONS[currentLang];
+  const q = qs[currentQ];
+  const isCorrect = idx === q.correct;
+  if (isCorrect) demoScore++;
+
+  const btns = document.querySelectorAll('.demo-opt');
+  btns.forEach((btn, i) => {
+    if (i === q.correct) btn.classList.add('correct-choice');
+    else if (i === idx && !isCorrect) btn.classList.add('wrong-choice');
+    else btn.classList.add('dim');
+  });
+
+  const fb = document.getElementById('demoFeedback');
+  fb.textContent = isCorrect ? q.feedback_correct : q.feedback_wrong;
+  fb.className = 'demo-feedback show ' + (isCorrect ? 'correct' : 'wrong');
+
+  const nextBtn = document.getElementById('demoNext');
+  const isLast = currentQ >= qs.length - 1;
+  nextBtn.textContent = isLast
+    ? (currentLang === 'en' ? 'See Results →' : 'Voir les résultats →')
+    : (currentLang === 'en' ? 'Next Question →' : 'Question suivante →');
+  nextBtn.className = 'demo-next-btn show';
+
+  document.getElementById('demoScoreText').textContent = currentLang === 'en'
+    ? `Score: ${demoScore} / ${qs.length}`
+    : `Score : ${demoScore} / ${qs.length}`;
+}
+
+function nextDemoQuestion() {
+  currentQ++;
+  renderQuestion();
+}
+
+function showResults() {
+  const qs = DEMO_QUESTIONS[currentLang];
+  document.getElementById('demoQuiz').style.display = 'none';
+  document.getElementById('demoResults').style.display = 'block';
+  document.getElementById('demoProgressFill').style.width = '100%';
+  document.getElementById('resultsBig').textContent = demoScore + '/' + qs.length;
+
+  if (currentLang === 'en') {
+    document.getElementById('resultsTitle').textContent = 'Demo Complete!';
+    document.getElementById('demoProgressText').textContent = 'Complete';
+    document.getElementById('demoScoreText').textContent = `Score: ${demoScore} / ${qs.length}`;
+    document.getElementById('resultsMsg').textContent = demoScore === qs.length
+      ? 'Perfect score! You clearly understand Shadow AI risks. The full training has 15 questions across 6 modules.'
+      : demoScore >= 2
+        ? 'Great job! A few nuances to review. The full training covers 6 modules with detailed explanations for every answer.'
+        : 'Shadow AI traps are subtle! The full training walks through each scenario step-by-step with context and rationale.';
+  } else {
+    document.getElementById('resultsTitle').textContent = 'Démo terminée !';
+    document.getElementById('demoProgressText').textContent = 'Terminé';
+    document.getElementById('demoScoreText').textContent = `Score : ${demoScore} / ${qs.length}`;
+    document.getElementById('resultsMsg').textContent = demoScore === qs.length
+      ? 'Score parfait ! Vous comprenez bien les risques du Shadow AI. La formation complète comporte 15 questions sur 6 modules.'
+      : demoScore >= 2
+        ? 'Bon travail ! Quelques nuances à revoir. La formation couvre 6 modules avec des explications pour chaque réponse.'
+        : 'Les pièges du Shadow AI sont subtils ! La formation détaille chaque scénario étape par étape.';
+  }
+}
+
+function restartDemo() {
+  currentQ = 0;
+  demoScore = 0;
+  renderQuestion();
+}
+
+renderQuestion();
+</script>
+</body>
+</html>
