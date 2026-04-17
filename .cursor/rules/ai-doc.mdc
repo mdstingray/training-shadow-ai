@@ -1,0 +1,11 @@
+---
+description: Emplacement des documents de référence pour l’agent (ai-doc)
+alwaysApply: true
+---
+
+# Documentation pour l’agent (`ai-doc`)
+
+Le dossier **`quiz-platform/ai-doc/`** contient de la documentation **à consulter au besoin** (architecture, déploiement, plans de tests, etc.). Ce n’est pas du code applicatif.
+
+- Avant une tâche qui touche l’architecture, le déploiement ou les tests d’intégration, **ouvrir ou lire les fichiers pertinents** dans ce dossier plutôt que de supposer le contexte.
+- Après des changements importants dans ces domaines, **mettre à jour** les fichiers correspondants dans `ai-doc/` pour que les prochaines sessions restent alignées.

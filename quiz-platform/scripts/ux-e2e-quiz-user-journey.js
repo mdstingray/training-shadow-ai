@@ -1,0 +1,637 @@
+/**
+ * UX E2E — full participant run A→Z:
+ *   - Every module and every step (overview pages, questions, interstitials) via the real `goNext()` path.
+ *   - Each question answered with the correct option (`selectAnswer` + visible feedback + rationale when present).
+ *   - Images checked per module; results screen: perfect score vs `countTotal()`, per-module chips, then `GET /api/progress` = completed & 100%.
+ *
+ * Uses the quiz page globals (`getModules`, `currentModule`, `selectAnswer`, `goNext`) inside `page.evaluate` — same realm as `quiz.html`.
+ *
+ * Run: QUIZ_CODE=<code> node scripts/ux-e2e-quiz-user-journey.js
+ *
+ * Product feedback (bugs / improvements / notes):
+ *   - stderr: human-readable block for PM & dev
+ *   - JSON: `productFeedback.findings` + `productFeedback.markdownReport` (paste into tickets)
+ *   - optional file: UX_REPORT_PATH=./tmp/ux-feedback.md
+ */
+const puppeteer = require('puppeteer');
+const path = require('path');
+const fs = require('fs');
+
+const BASE = process.env.BASE || 'http://localhost:3000';
+const QUIZ_CODE = process.env.QUIZ_CODE || process.env.CLAIRE_CODE || '';
+const HEADLESS = process.env.UX_HEADLESS !== '0';
+const SLOW_MS = Math.max(0, parseInt(process.env.UX_SLOW_MS || '0', 10) || 0);
+const SHOT_DIR = process.env.UX_SCREENSHOT_DIR || '';
+const REPORT_PATH = process.env.UX_REPORT_PATH || '';
+
+/** Structured items for product owners: bugs vs improvements vs notes. */
+const findings = [];
+
+const results = { pass: [], fail: [], warnings: [], stats: {} };
+
+const delay = ms => new Promise(r => setTimeout(r, ms));
+
+/**
+ * @param {'bug'|'improvement'|'note'} severity
+ * @param {string} area — screen or subsystem (e.g. intro, module-3, api/progress)
+ * @param {string} title — short label
+ * @param {string} [detail] — what the test observed
+ * @param {string} [suggestedAction] — how to fix or improve the product
+ */
+function finding(severity, area, title, detail = '', suggestedAction = '') {
+  findings.push({
+    code: `F-${String(findings.length + 1).padStart(3, '0')}`,
+    severity,
+    area,
+    title,
+    detail,
+    suggestedAction
+  });
+}
+
+function record(id, cond, msg) {
+  if (cond) results.pass.push(`${id}: ${msg}`);
+  else {
+    results.fail.push(`${id}: ${msg}`);
+    finding(
+      'bug',
+      id,
+      `Assertion failed: ${id}`,
+      msg,
+      'Fix the underlying behaviour or adjust the test if the spec changed.'
+    );
+  }
+}
+
+function warn(id, msg) {
+  results.warnings.push(`${id}: ${msg}`);
+  if (id === 'ux-stuck') {
+    finding('bug', 'quiz/navigation', 'Flow stuck: Next stayed disabled', msg, 'Check step logic, disabled rules, or async submit errors in the console.');
+  } else if (id === 'ux-rationale') {
+    /* `finding` is emitted in waitAfterQuestionAnswer with module/question context */
+  } else if (id.startsWith('ux-screenshot')) {
+    finding('note', 'ux-test', id, msg, '');
+  } else {
+    finding('improvement', id, msg, '', 'See warning context above.');
+  }
+}
+
+function parseViewport() {
+  const raw = process.env.UX_VIEWPORT || '1280x800';
+  const m = /^(\d+)x(\d+)$/.exec(raw.trim());
+  if (m) return { width: parseInt(m[1], 10), height: parseInt(m[2], 10) };
+  return { width: 1280, height: 800 };
+}
+
+function finalizeProductNotes(stats) {
+  if (results.fail.length > 0) return;
+  if (findings.some(f => f.severity === 'bug')) return;
+  finding(
+    'note',
+    'ux-run/summary',
+    'Automated UX run: all assertions passed',
+    `goNext steps: ${stats.goNextCalls ?? 'n/a'}, iterations: ${stats.iterations ?? 'n/a'}`,
+    'Optional: UX_HEADLESS=0 for a visual pass; try UX_VIEWPORT=390x844 for mobile smoke.'
+  );
+}
+
+function buildMarkdownReport(meta) {
+  const lines = [
+    `# UX test — product feedback`,
+    ``,
+    `- **When:** ${meta.isoTime}`,
+    `- **Base URL:** ${meta.base}`,
+    `- **Assertions:** ${meta.passCount} passed, ${meta.failCount} failed`,
+    ``,
+    `## Summary`,
+    ``,
+    `| Severity | Count |`,
+    `|----------|-------|`,
+    `| bug | ${meta.counts.bug} |`,
+    `| improvement | ${meta.counts.improvement} |`,
+    `| note | ${meta.counts.note} |`,
+    ``,
+    `## Findings (backlog-ready)`,
+    ``
+  ];
+
+  const bySev = { bug: [], improvement: [], note: [] };
+  for (const f of findings) {
+    if (bySev[f.severity]) bySev[f.severity].push(f);
+  }
+
+  const block = (title, arr) => {
+    lines.push(`### ${title}`, ``);
+    if (arr.length === 0) {
+      lines.push(`_None._`, ``);
+      return;
+    }
+    for (const f of arr) {
+      lines.push(`#### \`${f.code}\` — ${f.title}`, ``);
+      lines.push(`- **Area:** \`${f.area}\``);
+      if (f.detail) lines.push(`- **Observed:** ${f.detail}`);
+      if (f.suggestedAction) lines.push(`- **Suggested product action:** ${f.suggestedAction}`);
+      lines.push(``);
+    }
+  };
+
+  block('Bugs (investigate before release)', bySev.bug);
+  block('Improvements (UX / content / polish)', bySev.improvement);
+  block('Notes', bySev.note);
+
+  lines.push(
+    `---`,
+    `*Generated by \`scripts/ux-e2e-quiz-user-journey.js\`. Tune env: UX_HEADLESS, UX_SLOW_MS, UX_SCREENSHOT_DIR, UX_REPORT_PATH.*`,
+    ``
+  );
+  return lines.join('\n');
+}
+
+function formatProductFeedbackConsole() {
+  const counts = { bug: 0, improvement: 0, note: 0 };
+  for (const f of findings) {
+    if (counts[f.severity] !== undefined) counts[f.severity]++;
+  }
+
+  if (findings.length === 0) {
+    return '\n[product feedback] No findings recorded.\n';
+  }
+
+  const lines = [
+    '',
+    '='.repeat(76),
+    ' PRODUCT FEEDBACK — bugs, improvements, notes (share with PM / dev)',
+    '='.repeat(76),
+    ''
+  ];
+
+  const sevLabel = { bug: 'BUG', improvement: 'IMPROVE', note: 'NOTE' };
+  for (const f of findings) {
+    lines.push(
+      `[${sevLabel[f.severity] || f.severity}] ${f.code}  area=${f.area}`,
+      `  ${f.title}`
+    );
+    if (f.detail) lines.push(`  Observed: ${f.detail}`);
+    if (f.suggestedAction) lines.push(`  Suggested action: ${f.suggestedAction}`);
+    lines.push('');
+  }
+
+  lines.push(
+    '-'.repeat(76),
+    ` Totals: ${counts.bug} bug(s), ${counts.improvement} improvement(s), ${counts.note} note(s)`,
+    '='.repeat(76),
+    ''
+  );
+  return lines.join('\n');
+}
+
+async function isVisibleToUser(page, selector) {
+  return page.$eval(selector, el => {
+    const r = el.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const ix = Math.max(0, Math.min(r.right, vw) - Math.max(0, r.left));
+    const iy = Math.max(0, Math.min(r.bottom, vh) - Math.max(0, r.top));
+    const inter = ix * iy;
+    const elArea = Math.max(1, r.width * r.height);
+    const ratio = inter / elArea;
+    return ratio >= 0.15 && r.width >= 40 && r.height >= 24;
+  });
+}
+
+async function clickLikeUser(page, selector, { relaxedViewport = false } = {}) {
+  const handle = await page.$(selector);
+  if (!handle) throw new Error(`missing ${selector}`);
+  await handle.evaluate(el => el.scrollIntoView({ block: 'center', inline: 'nearest' }));
+  await delay(60);
+  if (!relaxedViewport) {
+    const vis = await isVisibleToUser(page, selector);
+    if (!vis) {
+      await handle.dispose();
+      throw new Error(`not visible to user: ${selector}`);
+    }
+  }
+  await page.click(selector, { delay: SLOW_MS ? Math.min(SLOW_MS, 80) : 15 });
+  await handle.dispose();
+}
+
+async function assertMainUsable(page, label) {
+  const ok = await page.evaluate(() => {
+    const main = document.getElementById('main');
+    if (!main) return { ok: false, w: 0, h: 0, overflowX: 0, why: 'no #main' };
+    const r = main.getBoundingClientRect();
+    const body = document.body;
+    const overflowX = body.scrollWidth - body.clientWidth;
+    const vis =
+      r.width >= 200 &&
+      r.height >= 64 &&
+      overflowX <= 2 &&
+      r.top < window.innerHeight &&
+      r.bottom > 0;
+    return {
+      ok: vis,
+      w: Math.round(r.width),
+      h: Math.round(r.height),
+      overflowX,
+      why: vis ? 'ok' : 'layout'
+    };
+  });
+  record(
+    `ux-${label}-screen`,
+    ok.ok,
+    `#main ${ok.w}x${ok.h} overflowΔ=${ok.overflowX} (${ok.why})`
+  );
+}
+
+async function assertImagesDecodedForUser(page, label) {
+  const broken = await page.evaluate(() => {
+    return Array.from(document.querySelectorAll('#main img'))
+      .map(img => !(img.complete && img.naturalWidth > 0) && (img.currentSrc || img.src))
+      .filter(Boolean);
+  });
+  record(`ux-${label}-images`, broken.length === 0, broken.length ? broken.join('; ') : 'images decode');
+}
+
+async function exerciseVisibleLinks(page) {
+  const base = new URL(BASE);
+  const first = await page.evaluate(baseOrigin => {
+    for (const a of document.querySelectorAll('.app a[href]')) {
+      const raw = a.getAttribute('href');
+      if (!raw || raw === '#' || raw.startsWith('javascript:')) continue;
+      if (raw.startsWith('mailto:') || raw.startsWith('tel:')) continue;
+      let u;
+      try {
+        u = new URL(raw, window.location.href);
+      } catch {
+        continue;
+      }
+      if (u.origin !== baseOrigin) continue;
+      const r = a.getBoundingClientRect();
+      const visible = r.width > 2 && r.height > 2 && r.bottom > 0 && r.top < window.innerHeight;
+      if (visible) return u.href;
+    }
+    return null;
+  }, base.origin);
+
+  if (!first) {
+    record('ux-links', true, 'no visible same-origin links in .app (skipped)');
+    return;
+  }
+
+  const before = page.url();
+  try {
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {}),
+      page.evaluate(href => {
+        const el = [...document.querySelectorAll('.app a[href]')].find(a => {
+          try {
+            return new URL(a.getAttribute('href'), window.location.href).href === href;
+          } catch {
+            return false;
+          }
+        });
+        if (el) {
+          el.scrollIntoView({ block: 'center' });
+          el.click();
+        }
+      }, first)
+    ]);
+    if (page.url() !== before) {
+      await page.goto(before, { waitUntil: 'networkidle2' });
+    }
+    record('ux-links', true, 'exercised visible link');
+  } catch (e) {
+    record('ux-links', false, e.message);
+  }
+}
+
+async function waitIntroOrError(page) {
+  await page.waitForFunction(
+    () =>
+      document.querySelector('.intro .start-btn') ||
+      document.querySelector('.error-screen') ||
+      document.querySelector('.results-card'),
+    { timeout: 15000 }
+  );
+}
+
+async function waitAfterQuestionAnswer(page, ctx) {
+  const where = ctx ? `module ${ctx.moduleNum} (UI), question ${ctx.questionNum}` : 'question step';
+  try {
+    await page.waitForSelector('#main .feedback.correct, #main .feedback.wrong', {
+      visible: true,
+      timeout: 8000
+    });
+  } catch {
+    finding(
+      'bug',
+      'quiz/feedback',
+      'Answer feedback not visible after selecting an option',
+      where,
+      'Ensure feedback_correct / feedback_wrong renders and .feedback gets the .show class.'
+    );
+    throw new Error('feedback missing');
+  }
+
+  const hasRationale = await page
+    .waitForSelector('#main .rationale-box', { visible: true, timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+
+  if (!hasRationale) {
+    results.warnings.push(`ux-rationale: no .rationale-box after answer (${where})`);
+    finding(
+      'improvement',
+      'quiz/rationale',
+      '“Pourquoi chaque réponse ?” block missing or not visible',
+      where,
+      'Align explain_opts length with opts, or fix CSS so .rationale-box is not hidden.'
+    );
+  }
+  await delay(SLOW_MS ? SLOW_MS : 60);
+}
+
+/**
+ * Drive the full quiz using the same logic as the app: answer correctly, then await goNext() for each advance.
+ * Counts module transitions and goNext calls for diagnostics.
+ */
+async function completeFullQuizFromAToZ(page) {
+  let goNextCount = 0;
+  let lastModule = -2;
+  let stuck = 0;
+
+  for (let iter = 0; iter < 20000; iter++) {
+    if (await page.$('.results-card')) {
+      results.stats = {
+        goNextCalls: goNextCount,
+        iterations: iter
+      };
+      return true;
+    }
+
+    if (await page.$('.intro .start-btn')) {
+      await clickLikeUser(page, '.intro .start-btn');
+      await delay(150 + SLOW_MS);
+      stuck = 0;
+      continue;
+    }
+
+    await page.waitForSelector('#nextBtn', { timeout: 10000 }).catch(() => {});
+
+    const snap = await page.evaluate(() => {
+      if (document.querySelector('.results-card')) return { results: true };
+      const m = currentModule;
+      const steps = m >= 0 ? getModuleSteps(m) : [];
+      const step = m >= 0 ? steps[currentStep] : null;
+      const needAnswer =
+        step && step.type === 'question' && !findAnswer(m, step.qIdx);
+      const nextEl = document.querySelector('#nextBtn');
+      return {
+        results: false,
+        currentModule: m,
+        needAnswer: !!needAnswer,
+        nextDisabled: nextEl ? nextEl.disabled : true
+      };
+    });
+
+    if (snap.results) continue;
+
+    if (snap.currentModule !== lastModule && snap.currentModule >= 0) {
+      lastModule = snap.currentModule;
+      await assertImagesDecodedForUser(page, `module-${snap.currentModule + 1}`);
+    }
+
+    if (snap.needAnswer) {
+      const qCtx = await page.evaluate(() => {
+        const steps = getModuleSteps(currentModule);
+        const step = steps[currentStep];
+        return {
+          moduleNum: currentModule + 1,
+          questionNum: step.qIdx + 1
+        };
+      });
+      await page.evaluate(() => {
+        const steps = getModuleSteps(currentModule);
+        const step = steps[currentStep];
+        selectAnswer(currentModule, step.qIdx, step.question.correct);
+      });
+      try {
+        await waitAfterQuestionAnswer(page, qCtx);
+      } catch {
+        return false;
+      }
+      stuck = 0;
+      continue;
+    }
+
+    if (snap.nextDisabled) {
+      stuck++;
+      if (stuck > 200) {
+        warn(
+          'ux-stuck',
+          `next disabled too long at module ${snap.currentModule} step ${await page.evaluate(() => currentStep)}`
+        );
+        return false;
+      }
+      await delay(40);
+      continue;
+    }
+
+    await page.evaluate(async () => {
+      await goNext();
+    });
+    goNextCount++;
+    await delay(120 + SLOW_MS);
+    stuck = 0;
+  }
+
+  return false;
+}
+
+async function fetchProgress(code) {
+  const url = `${BASE.replace(/\/$/, '')}/api/progress/${encodeURIComponent(code)}`;
+  const res = await fetch(url);
+  const text = await res.text();
+  let json = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    /* ignore */
+  }
+  return { ok: res.ok, status: res.status, json };
+}
+
+async function maybeScreenshot(page, name) {
+  if (!SHOT_DIR) return;
+  try {
+    fs.mkdirSync(SHOT_DIR, { recursive: true });
+    const file = path.join(SHOT_DIR, `${name}.png`);
+    await page.screenshot({ path: file, fullPage: false });
+    warn('ux-screenshot', file);
+  } catch (e) {
+    warn('ux-screenshot-fail', e.message);
+  }
+}
+
+(async () => {
+  if (!QUIZ_CODE) {
+    console.error('Set QUIZ_CODE (or CLAIRE_CODE) to a valid campaign user code from `npm run seed`.');
+    process.exit(1);
+  }
+
+  const browser = await puppeteer.launch({
+    headless: HEADLESS,
+    slowMo: SLOW_MS || undefined,
+    args: ['--window-size=' + parseViewport().width + ',' + parseViewport().height]
+  });
+  const page = await browser.newPage();
+  const vp = parseViewport();
+  await page.setViewport(vp);
+
+  await page.goto(`${BASE}/quiz?code=${encodeURIComponent(QUIZ_CODE)}`, { waitUntil: 'networkidle2' });
+  await waitIntroOrError(page);
+
+  const isError = await page.$('.error-screen');
+  record('ux-load', !isError, isError ? 'invalid QUIZ_CODE' : 'quiz shell loaded');
+
+  if (isError) {
+    await maybeScreenshot(page, 'error');
+    await browser.close();
+    console.log(JSON.stringify({ kind: 'ux-user-journey', pass: results.pass.length, fail: results.fail.length, results }, null, 2));
+    process.exit(1);
+  }
+
+  const expectedTotalQs = await page.evaluate(() => {
+    let c = 0;
+    getModules().forEach(m => {
+      c += m.questions.length;
+    });
+    return c;
+  });
+  const expectedModules = await page.evaluate(() => getModules().length);
+
+  await page.waitForSelector('.intro .start-btn', { visible: true, timeout: 8000 });
+  record('ux-intro-visible', await isVisibleToUser(page, '.intro .start-btn'), 'start visible');
+
+  await assertMainUsable(page, 'intro');
+  await assertImagesDecodedForUser(page, 'intro');
+
+  await page.evaluate(() => document.fonts.ready);
+  record('ux-fonts', true, 'fonts ready');
+
+  await exerciseVisibleLinks(page);
+
+  const flowOk = await completeFullQuizFromAToZ(page);
+  record('ux-journey', flowOk, flowOk ? `A→Z complete (${results.stats.goNextCalls} advances)` : 'did not reach results');
+
+  await page.waitForSelector('.results-card', { timeout: flowOk ? 8000 : 1 }).catch(() => {});
+
+  const hasResults = !!(await page.$('.results-card'));
+  if (hasResults) {
+    await page.waitForSelector('.results-card', { visible: true, timeout: 5000 });
+    await assertMainUsable(page, 'results');
+    await assertImagesDecodedForUser(page, 'results');
+
+    const scoreParse = await page.evaluate(() => {
+      const card = document.querySelector('.results-card');
+      if (!card) return null;
+      const t = card.innerText;
+      const m = t.match(/(\d+)\s*\/\s*(\d+)/);
+      if (!m) return null;
+      return { got: parseInt(m[1], 10), total: parseInt(m[2], 10) };
+    });
+    const perfect =
+      scoreParse &&
+      scoreParse.got === scoreParse.total &&
+      scoreParse.total === expectedTotalQs;
+    record(
+      'ux-results-perfect-score',
+      perfect,
+      scoreParse
+        ? `score ${scoreParse.got}/${scoreParse.total} (expected ${expectedTotalQs} questions)`
+        : 'could not parse score'
+    );
+
+    const chipsOk = await page.evaluate(exp => {
+      const chips = document.querySelectorAll('.result-chip, .result-bar');
+      return chips.length >= exp;
+    }, expectedModules);
+    record('ux-results-modules', chipsOk, `per-module summary present (≥${expectedModules} blocks)`);
+
+    await maybeScreenshot(page, 'results');
+  } else {
+    await maybeScreenshot(page, 'fail-state');
+  }
+
+  await browser.close();
+
+  const prog = await fetchProgress(QUIZ_CODE);
+  const p = prog.json;
+  const progressOk =
+    prog.ok &&
+    p &&
+    p.status === 'completed' &&
+    p.completionPercent === 100 &&
+    Array.isArray(p.perModule) &&
+    p.perModule.length === expectedModules &&
+    p.perModule.every(x => x.completed);
+  record(
+    'ux-api-progress',
+    progressOk,
+    progressOk
+      ? `GET /api/progress: completed, 100%, ${expectedModules} modules`
+      : `progress: ${prog.status} ${prog.ok ? JSON.stringify(p).slice(0, 200) : 'bad response'}`
+  );
+
+  finalizeProductNotes(results.stats);
+
+  const counts = { bug: 0, improvement: 0, note: 0 };
+  for (const f of findings) {
+    if (counts[f.severity] !== undefined) counts[f.severity]++;
+  }
+
+  const markdownReport = buildMarkdownReport({
+    isoTime: new Date().toISOString(),
+    base: BASE,
+    passCount: results.pass.length,
+    failCount: results.fail.length,
+    counts
+  });
+
+  const payload = {
+    kind: 'ux-user-journey',
+    headless: HEADLESS,
+    slowMo: SLOW_MS,
+    viewport: vp,
+    expectedModules,
+    expectedTotalQs,
+    stats: results.stats,
+    pass: results.pass.length,
+    fail: results.fail.length,
+    warnings: results.warnings,
+    productFeedback: {
+      findings,
+      markdownReport,
+      counts
+    },
+    results
+  };
+
+  console.log(JSON.stringify(payload, null, 2));
+  console.error(formatProductFeedbackConsole());
+
+  if (REPORT_PATH) {
+    try {
+      fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
+      fs.writeFileSync(REPORT_PATH, markdownReport, 'utf8');
+      console.error(`[product feedback] Wrote markdown report: ${REPORT_PATH}\n`);
+    } catch (e) {
+      console.error(`[product feedback] Could not write UX_REPORT_PATH: ${e.message}\n`);
+    }
+  }
+
+  process.exit(results.fail.length ? 1 : 0);
+})().catch(e => {
+  console.error(e);
+  process.exit(1);
+});

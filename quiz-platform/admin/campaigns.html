@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campagnes — Admin Quiz</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#111111;--accent:#0070e0;--highlight:#41c3ff;--text:#ffffff;--card:#1a1a1a;--card-border:#2a2a2a;--ok:#22c55e;--bad:#ef4444;--radius:12px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+.app{max-width:900px;margin:0 auto;padding:24px 16px}
+.header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:20px;border-bottom:1px solid var(--card-border);margin-bottom:24px;flex-wrap:wrap}
+.header h1{font-size:1.25rem;font-weight:700;color:var(--highlight)}
+.header p{font-size:.85rem;color:#888;margin-top:6px;max-width:520px}
+.nav{display:flex;gap:10px;flex-wrap:wrap}
+.btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:.88rem;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:#005bb5}
+.btn.outline{background:transparent;border:1px solid #444;color:#ccc}
+.btn.outline:hover{border-color:var(--accent);color:#fff}
+.btn.small{padding:6px 12px;font-size:.8rem}
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);padding:20px;margin-bottom:20px}
+.card h2{font-size:1rem;margin-bottom:14px;color:#ccc}
+.form-grid{display:grid;gap:12px;max-width:420px}
+label{font-size:.82rem;color:#999;display:block;margin-bottom:4px}
+input,select{background:#222;border:1px solid #444;border-radius:6px;padding:8px 12px;color:#fff;font-size:.9rem;width:100%}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+.table-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--card-border)}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th{background:#1a1a1a;color:#999;font-weight:600;text-align:left;padding:10px 12px;border-bottom:1px solid var(--card-border)}
+td{padding:10px 12px;border-bottom:1px solid #222;vertical-align:top}
+tr:hover td{background:rgba(0,112,224,.04)}
+.import-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+.msg{font-size:.82rem;margin-top:8px;padding:8px 10px;border-radius:6px;background:#1e2a1e;color:#a3e635}
+.msg.warn{background:#2a2210;color:#fbbf24}
+.msg.err{background:#2a1515;color:#fca5a5}
+.empty{color:#666;text-align:center;padding:32px}
+.error{padding:48px 20px;text-align:center;color:var(--bad)}
+code{font-size:.78rem;background:#2a2a2a;padding:2px 6px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <div>
+      <h1>Campagnes</h1>
+      <p>Crée une campagne par déploiement (ville, équipe, date). Importe un CSV par campagne : nom employé, courriel, nom du superviseur, courriel du superviseur.</p>
+    </div>
+    <nav class="nav">
+      <a class="btn outline" id="dashLink" href="#">← Tableau de bord</a>
+    </nav>
+  </header>
+
+  <div id="main"><div class="empty">Chargement…</div></div>
+</div>
+
+<script>
+const API_BASE = window.location.origin;
+
+function getToken() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('token') || '';
+}
+
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str == null ? '' : String(str);
+  return d.innerHTML;
+}
+
+async function load() {
+  const token = getToken();
+  if (!token) {
+    document.getElementById('main').innerHTML = '<div class="error"><h2>Non autorisé</h2><p>Ajoutez <code>?token=…</code> à l’URL.</p></div>';
+    return;
+  }
+
+  document.getElementById('dashLink').href = 'dashboard.html?token=' + encodeURIComponent(token);
+
+  try {
+    const [campRes, quizRes] = await Promise.all([
+      fetch(API_BASE + '/admin/api/campaigns?token=' + encodeURIComponent(token)),
+      fetch(API_BASE + '/admin/api/quizzes?token=' + encodeURIComponent(token))
+    ]);
+    if (!campRes.ok || !quizRes.ok) {
+      document.getElementById('main').innerHTML = '<div class="error"><h2>Non autorisé</h2><p>Token admin invalide.</p></div>';
+      return;
+    }
+    const { campaigns } = await campRes.json();
+    const { quizzes } = await quizRes.json();
+    render(token, campaigns || [], quizzes || []);
+  } catch (e) {
+    document.getElementById('main').innerHTML = '<div class="error"><p>Impossible de joindre le serveur.</p></div>';
+  }
+}
+
+function render(token, campaigns, quizzes) {
+  const quizOptions = quizzes.map(q =>
+    `<option value="${q.id}">${esc(q.name)} (${q.module_count} modules)</option>`
+  ).join('');
+
+  let rows = campaigns.map(c => `
+    <tr>
+      <td><strong>${esc(c.name)}</strong></td>
+      <td>${esc(c.quiz_name || '')}</td>
+      <td>${esc(c.deadline || '—')}</td>
+      <td>${c.participant_count != null ? c.participant_count : '—'}</td>
+      <td>
+        <div class="import-row">
+          <input type="file" accept=".csv,text/csv" id="csv-${c.id}" />
+          <button type="button" class="btn small" data-import="${c.id}">Importer CSV</button>
+        </div>
+        <div id="msg-${c.id}"></div>
+      </td>
+    </tr>
+  `).join('');
+
+  if (!rows) {
+    rows = '<tr><td colspan="5" class="empty">Aucune campagne. Créez-en une ci-dessous.</td></tr>';
+  }
+
+  document.getElementById('main').innerHTML = `
+    <div class="card">
+      <h2>Nouvelle campagne</h2>
+      <form id="createForm" class="form-grid">
+        <div>
+          <label for="cname">Nom de la campagne</label>
+          <input id="cname" name="name" required placeholder="ex. Montréal — avril 2026" />
+        </div>
+        <div>
+          <label for="cquiz">Questionnaire (contenu)</label>
+          <select id="cquiz" name="quiz_id" required>${quizOptions || '<option value="">Aucun quiz</option>'}</select>
+        </div>
+        <div>
+          <label for="cdeadline">Échéance (optionnel)</label>
+          <input id="cdeadline" name="deadline" type="date" />
+        </div>
+        <div><button type="submit" class="btn">Créer la campagne</button></div>
+        <div id="createMsg"></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Format CSV attendu</h2>
+      <p style="font-size:.88rem;color:#aaa;margin-bottom:10px">Première ligne : en-têtes. Colonnes reconnues (FR ou EN) : <strong>nom employé</strong>, <strong>email / courriel</strong>, <strong>nom du superviseur</strong>, <strong>courriel du superviseur</strong>.</p>
+      <pre style="font-size:.78rem;background:#0d0d0d;padding:12px;border-radius:8px;overflow:auto">nom_employe,email,nom_superviseur,courriel_superviseur
+Jean Tremblay,jean.t@entreprise.com,Marie Dupont,marie.d@entreprise.com</pre>
+    </div>
+
+    <div class="card">
+      <h2>Campagnes existantes</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nom</th>
+              <th>Questionnaire</th>
+              <th>Échéance</th>
+              <th>Participants</th>
+              <th>Import CSV</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('createForm').onsubmit = async (ev) => {
+    ev.preventDefault();
+    const msg = document.getElementById('createMsg');
+    msg.innerHTML = '';
+    const name = document.getElementById('cname').value.trim();
+    const quiz_id = parseInt(document.getElementById('cquiz').value, 10);
+    const deadline = document.getElementById('cdeadline').value || null;
+    try {
+      const res = await fetch(API_BASE + '/admin/api/campaigns?token=' + encodeURIComponent(token), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, quiz_id, deadline })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        msg.innerHTML = '<div class="msg err">' + esc(data.error || res.status) + '</div>';
+        return;
+      }
+      msg.innerHTML = '<div class="msg">Campagne créée.</div>';
+      load();
+    } catch (e) {
+      msg.innerHTML = '<div class="msg err">Erreur réseau</div>';
+    }
+  };
+
+  campaigns.forEach(c => {
+    const btn = document.querySelector('[data-import="' + c.id + '"]');
+    if (!btn) return;
+    btn.onclick = async () => {
+      const input = document.getElementById('csv-' + c.id);
+      const box = document.getElementById('msg-' + c.id);
+      box.innerHTML = '';
+      if (!input.files || !input.files[0]) {
+        box.innerHTML = '<div class="msg err">Choisissez un fichier .csv</div>';
+        return;
+      }
+      const fd = new FormData();
+      fd.append('file', input.files[0]);
+      try {
+        const res = await fetch(API_BASE + '/admin/api/campaigns/' + c.id + '/import?token=' + encodeURIComponent(token), {
+          method: 'POST',
+          body: fd
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          box.innerHTML = '<div class="msg err">' + esc(data.error || 'Erreur') + '</div>';
+          return;
+        }
+        let w = (data.warnings && data.warnings.length)
+          ? '<div class="msg warn">' + data.warnings.map(esc).join('<br>') + '</div>'
+          : '';
+        box.innerHTML = '<div class="msg">Import terminé — ' + (data.enrollments_created || 0) + ' inscription(s), ' +
+          (data.enrollments_updated || 0) + ' mise(s) à jour.</div>' + w;
+        load();
+      } catch (e) {
+        box.innerHTML = '<div class="msg err">Erreur réseau</div>';
+      }
+    };
+  });
+}
+
+load();
+</script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/init');
+const { resolveParticipantByCode } = require('../lib/resolveCode');
 
 router.post('/start', (req, res) => {
   const { code } = req.body;
@@ -10,39 +11,47 @@ router.post('/start', (req, res) => {
   }
 
   const db = getDb();
-
-  const user = db.prepare('SELECT * FROM users WHERE unique_code = ?').get(code);
-  if (!user) {
-    return res.status(401).json({ error: 'invalid_code', message: 'Lien invalide — contacte ton admin. / Invalid link — contact your admin.' });
+  const resolved = resolveParticipantByCode(db, code);
+  if (!resolved) {
+    return res.status(401).json({
+      error: 'invalid_code',
+      message: 'Lien invalide — contacte ton admin. / Invalid link — contact your admin.'
+    });
   }
 
-  const quizUsers = db.prepare(`
-    SELECT q.* FROM quizzes q
-    JOIN quiz_users qu ON qu.quiz_id = q.id
-    WHERE qu.user_id = ?
-  `).all(user.id);
+  const { user, quiz, campaign } = resolved;
 
-  if (quizUsers.length === 0) {
-    return res.status(404).json({ error: 'no_quiz_assigned' });
-  }
-
-  const quiz = quizUsers[0];
-
-  const modules = db.prepare(`
+  const modules = db
+    .prepare(
+      `
     SELECT id, title, position FROM modules
     WHERE quiz_id = ? ORDER BY position ASC
-  `).all(quiz.id);
+  `
+    )
+    .all(quiz.id);
 
-  const attempts = db.prepare(`
+  const deadline = campaign.deadline || quiz.deadline;
+
+  const attempts = db
+    .prepare(
+      `
     SELECT module_id, score, time_spent_seconds, attempt_number, completed_at
     FROM attempts
-    WHERE user_id = ? AND quiz_id = ?
+    WHERE user_id = ? AND quiz_id = ? AND campaign_id = ?
     ORDER BY completed_at DESC
-  `).all(user.id, quiz.id);
+  `
+    )
+    .all(user.id, quiz.id, campaign.id);
 
   res.json({
     user: { id: user.id, name: user.name, email: user.email },
-    quiz: { id: quiz.id, name: quiz.name, description: quiz.description, deadline: quiz.deadline },
+    quiz: {
+      id: quiz.id,
+      name: quiz.name,
+      description: quiz.description,
+      deadline
+    },
+    campaign: { id: campaign.id, name: campaign.name, deadline: campaign.deadline },
     modules,
     attempts
   });

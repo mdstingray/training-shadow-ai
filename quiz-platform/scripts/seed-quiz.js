@@ -1,7 +1,7 @@
 require('dotenv').config();
 
 const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+const { generateCode } = require('../backend/lib/codes');
 
 if (!process.env.DB_PATH) {
   process.env.DB_PATH = path.join(__dirname, '..', 'backend', 'db', 'quiz.db');
@@ -9,8 +9,24 @@ if (!process.env.DB_PATH) {
 
 const { getDb } = require('../backend/db/init');
 
-function generateCode() {
-  return uuidv4().replace(/-/g, '').substring(0, 9).toUpperCase();
+const MODULE_TITLES = [
+  { fr: 'Comment des données fuient en 30 secondes', en: 'How data leaks in 30 seconds' },
+  { fr: 'Où va réellement votre prompt', en: 'Where your prompt actually goes' },
+  { fr: 'Votre boîte à outils approuvée', en: 'Your approved toolbox' },
+  { fr: 'Zone grise : les pièges que même les gens prudents font', en: 'Gray zone: the traps careful people fall into' },
+  { fr: 'Sous pression, sans céder', en: 'Under pressure, without caving' },
+  { fr: 'Votre boussole Shadow AI', en: 'Your Shadow AI compass' }
+];
+
+function refreshModuleTitles(db, quizId) {
+  const updateByPos = db.prepare('UPDATE modules SET title = ? WHERE quiz_id = ? AND position = ?');
+  let updated = 0;
+  for (let i = 0; i < MODULE_TITLES.length; i++) {
+    const m = MODULE_TITLES[i];
+    const res = updateByPos.run(`${m.fr} / ${m.en}`, quizId, i + 1);
+    updated += res.changes;
+  }
+  return updated;
 }
 
 function seed() {
@@ -18,8 +34,10 @@ function seed() {
 
   const existingQuiz = db.prepare("SELECT id FROM quizzes WHERE name = 'Shadow AI Training'").get();
   if (existingQuiz) {
-    console.log('Shadow AI quiz already exists (id=' + existingQuiz.id + '). Skipping seed.');
-    console.log('To re-seed, delete the database file and run again.');
+    const updated = refreshModuleTitles(db, existingQuiz.id);
+    console.log('Shadow AI quiz already exists (id=' + existingQuiz.id + ').');
+    console.log(`Refreshed ${updated} module title(s) to the latest content. No user/attempt data changed.`);
+    console.log('To re-seed fully, delete the database file and run again.');
     return;
   }
 
@@ -33,14 +51,7 @@ function seed() {
   );
   const quizId = quizResult.lastInsertRowid;
 
-  const moduleTitles = [
-    { fr: "Qu'est-ce que le Shadow AI ?", en: "What is Shadow AI?" },
-    { fr: "Les risques réels", en: "Real Risks" },
-    { fr: "Les outils approuvés", en: "Approved Tools" },
-    { fr: "Le bon processus", en: "The Right Process" },
-    { fr: "Scénarios pratiques", en: "Practical Scenarios" },
-    { fr: "Quiz final — Vrai ou Faux", en: "Final Quiz — True or False" }
-  ];
+  const moduleTitles = MODULE_TITLES;
 
   const moduleIds = [];
   for (let i = 0; i < moduleTitles.length; i++) {
@@ -52,6 +63,12 @@ function seed() {
     moduleIds.push(result.lastInsertRowid);
   }
 
+  const campaignResult = db.prepare(`
+    INSERT INTO campaigns (name, quiz_id, deadline)
+    VALUES (?, ?, ?)
+  `).run('Stingray Town Hall 2026', quizId, '2026-04-23');
+  const campaignId = campaignResult.lastInsertRowid;
+
   const sampleUsers = [
     { name: 'Alice Martin', email: 'alice.martin@stingray.com' },
     { name: 'Bob Tremblay', email: 'bob.tremblay@stingray.com' },
@@ -62,23 +79,23 @@ function seed() {
 
   console.log('\n=== Shadow AI Quiz Platform — Seed ===\n');
   console.log(`Quiz created: "${moduleTitles.map(m => m.fr).join('" / "')}"  (id=${quizId})`);
+  console.log(`Campaign id=${campaignId} (Stingray Town Hall 2026)`);
   console.log(`Modules: ${moduleIds.length}`);
   console.log(`\nModule IDs: ${moduleIds.join(', ')}\n`);
   console.log('--- Sample Users & Links ---\n');
 
   const PORT = process.env.PORT || 3000;
 
+  const insertUser = db.prepare('INSERT INTO users (email, name) VALUES (?, ?)');
+  const insertCu = db.prepare(`
+    INSERT INTO campaign_users (campaign_id, user_id, unique_code, supervisor_name, supervisor_email)
+    VALUES (?, ?, ?, NULL, NULL)
+  `);
+
   for (const u of sampleUsers) {
     const code = generateCode();
-    const userResult = db.prepare(`
-      INSERT INTO users (email, name, unique_code)
-      VALUES (?, ?, ?)
-    `).run(u.email, u.name, code);
-
-    db.prepare(`
-      INSERT INTO quiz_users (quiz_id, user_id)
-      VALUES (?, ?)
-    `).run(quizId, userResult.lastInsertRowid);
+    const userResult = insertUser.run(u.email, u.name);
+    insertCu.run(campaignId, userResult.lastInsertRowid, code);
 
     console.log(`  ${u.name} <${u.email}>`);
     console.log(`  -> http://localhost:${PORT}/quiz?code=${code}\n`);

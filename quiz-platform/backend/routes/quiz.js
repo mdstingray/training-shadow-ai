@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/init');
+const { resolveParticipantByCode } = require('../lib/resolveCode');
 
 router.post('/submit', (req, res) => {
   const { code, module_id, score, time_spent_seconds, attempt_number } = req.body;
@@ -10,29 +11,42 @@ router.post('/submit', (req, res) => {
   }
 
   const db = getDb();
-
-  const user = db.prepare('SELECT * FROM users WHERE unique_code = ?').get(code);
-  if (!user) {
+  const resolved = resolveParticipantByCode(db, code);
+  if (!resolved) {
     return res.status(401).json({ error: 'invalid_code' });
   }
+
+  const { user, quiz, campaign } = resolved;
 
   const mod = db.prepare('SELECT * FROM modules WHERE id = ?').get(module_id);
   if (!mod) {
     return res.status(404).json({ error: 'invalid_module' });
   }
 
+  if (mod.quiz_id !== quiz.id) {
+    return res.status(400).json({ error: 'module_not_in_campaign' });
+  }
+
   const timeSpent = time_spent_seconds || 0;
 
-  const prevAttempts = db.prepare(
-    'SELECT MAX(attempt_number) as max_attempt FROM attempts WHERE user_id = ? AND quiz_id = ? AND module_id = ?'
-  ).get(user.id, mod.quiz_id, module_id);
+  const prevAttempts = db
+    .prepare(
+      `
+    SELECT MAX(attempt_number) as max_attempt FROM attempts
+    WHERE user_id = ? AND quiz_id = ? AND module_id = ? AND campaign_id = ?
+  `
+    )
+    .get(user.id, mod.quiz_id, module_id, campaign.id);
 
-  const nextAttempt = (prevAttempts && prevAttempts.max_attempt) ? prevAttempts.max_attempt + 1 : 1;
+  const nextAttempt = prevAttempts && prevAttempts.max_attempt ? prevAttempts.max_attempt + 1 : 1;
   const attemptNum = attempt_number || nextAttempt;
 
   db.prepare(
-    'INSERT INTO attempts (user_id, quiz_id, module_id, score, time_spent_seconds, attempt_number) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(user.id, mod.quiz_id, module_id, score, timeSpent, attemptNum);
+    `
+    INSERT INTO attempts (user_id, quiz_id, module_id, score, time_spent_seconds, attempt_number, campaign_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `
+  ).run(user.id, mod.quiz_id, module_id, score, timeSpent, attemptNum, campaign.id);
 
   res.json({ success: true, message: 'Answer submitted', attempt_number: attemptNum });
 });
@@ -41,33 +55,38 @@ router.get('/progress/:code', (req, res) => {
   const { code } = req.params;
   const db = getDb();
 
-  const user = db.prepare('SELECT * FROM users WHERE unique_code = ?').get(code);
-  if (!user) {
+  const resolved = resolveParticipantByCode(db, code);
+  if (!resolved) {
     return res.status(401).json({ error: 'invalid_code' });
   }
 
-  const quizUser = db.prepare(
-    'SELECT q.* FROM quizzes q JOIN quiz_users qu ON qu.quiz_id = q.id WHERE qu.user_id = ?'
-  ).get(user.id);
+  const { user, quiz, campaign } = resolved;
 
-  if (!quizUser) {
-    return res.json({ user: { id: user.id, name: user.name }, quizzes: [] });
-  }
+  const modules = db
+    .prepare(
+      `
+    SELECT id, title, position FROM modules WHERE quiz_id = ? ORDER BY position ASC
+  `
+    )
+    .all(quiz.id);
 
-  const modules = db.prepare(
-    'SELECT id, title, position FROM modules WHERE quiz_id = ? ORDER BY position ASC'
-  ).all(quizUser.id);
-
-  const attempts = db.prepare(
-    'SELECT module_id, score, time_spent_seconds, attempt_number, completed_at FROM attempts WHERE user_id = ? AND quiz_id = ? ORDER BY completed_at DESC'
-  ).all(user.id, quizUser.id);
+  const attempts = db
+    .prepare(
+      `
+    SELECT module_id, score, time_spent_seconds, attempt_number, completed_at
+    FROM attempts
+    WHERE user_id = ? AND quiz_id = ? AND campaign_id = ?
+    ORDER BY completed_at DESC
+  `
+    )
+    .all(user.id, quiz.id, campaign.id);
 
   const completedModuleIds = new Set(attempts.map(a => a.module_id));
   const totalModules = modules.length;
   const completedModules = completedModuleIds.size;
 
   let status = 'not_started';
-  if (completedModules === totalModules) status = 'completed';
+  if (totalModules > 0 && completedModules === totalModules) status = 'completed';
   else if (completedModules > 0) status = 'in_progress';
 
   const bestScores = {};
@@ -77,9 +96,11 @@ router.get('/progress/:code', (req, res) => {
     }
   }
   const bestScoreValues = Object.values(bestScores);
-  const avgBestScore = bestScoreValues.length > 0
-    ? Math.round(bestScoreValues.reduce((s, v) => s + v, 0) / bestScoreValues.length * 100) / 100
-    : 0;
+  const avgBestScore =
+    bestScoreValues.length > 0
+      ? Math.round((bestScoreValues.reduce((s, v) => s + v, 0) / bestScoreValues.length) * 100) /
+        100
+      : 0;
 
   const totalTime = attempts.reduce((sum, a) => sum + a.time_spent_seconds, 0);
 
@@ -98,11 +119,12 @@ router.get('/progress/:code', (req, res) => {
 
   res.json({
     user: { id: user.id, name: user.name, email: user.email },
-    quiz: { id: quizUser.id, name: quizUser.name },
+    quiz: { id: quiz.id, name: quiz.name },
+    campaign: { id: campaign.id, name: campaign.name },
     status,
     completedModules,
     totalModules,
-    completionPercent: totalModules > 0 ? Math.round(completedModules / totalModules * 100) : 0,
+    completionPercent: totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0,
     avgBestScore,
     totalTime,
     perModule,
